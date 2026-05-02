@@ -40,4 +40,5 @@ def get_all_accounts(brokerage_filter: str | None = None) -> list[AccountConfig]
     return results
 
 
-OUTPUT_DIR = _REPO_ROOT / _cfg.get("output", {}).get("dir", "charts")
+_TOOL_DIR = _CONFIG_PATH.parent
+OUTPUT_DIR = _TOOL_DIR / _cfg.get("output", {}).get("dir", "charts")
