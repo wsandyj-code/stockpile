@@ -1,11 +1,12 @@
 # Options Position Tracker
 
-Track your covered calls, sold puts, dividends, and underlying stock performance
-in Google Sheets — automatically built from your Schwab transaction history.
+Track your covered calls, sold puts, dividends, and underlying stock
+performance in Google Sheets — automatically built from your brokerage
+transaction history.
 
-One command turns a Schwab CSV export into a fully formatted Google Sheet with
-live prices, annualized yields, P&L breakdown, and a summary tab across all
-your positions.
+One command turns a brokerage CSV export into a fully formatted Google
+Sheet with live prices, annualized yields, P&L breakdown, and a summary
+tab across all your positions.
 
 Built entirely with [Claude Code](https://claude.ai/code) — no manual coding required.
 
@@ -33,56 +34,63 @@ Built entirely with [Claude Code](https://claude.ai/code) — no manual coding r
 ## Setup
 
 ### What you need
-- Python 3 installed
-- A Schwab brokerage account
+- Python 3.12+ and [uv](https://docs.astral.sh/uv/)
+- A supported brokerage account (Schwab, Robinhood, Fidelity, or
+  Merrill Edge)
 - A Google account
 
 ### Step 1 — Get the code
 
-Download or clone this repo:
-
 ```
-git clone https://github.com/medloh/stocks-positions.git
-cd stocks-positions
-```
-
-Install dependencies:
-
-```
-pip install google-auth google-auth-oauthlib google-api-python-client yfinance
+git clone https://github.com/medloh/stockpile.git
+cd stockpile
+uv sync
 ```
 
-### Step 2 — Download your transaction history from Schwab
+### Step 2 — Download your transaction history
 
-1. Log in to Schwab and go to **Accounts → History**
-2. Set the date range to cover your full history — go back as far as you can
-3. Click **Export** — it downloads as a CSV
-4. Save it as `ALL_TRANS.csv` in the repo root folder
+Export your full transaction history from your brokerage and place the
+CSV in the `input/` folder. Supported brokerages and their export
+locations:
 
-The script handles all tickers from a single export. You don't need to clean
-up or reformat the file.
+- **Schwab** — Accounts → History → Export
+- **Robinhood** — Account → Statements & History → Export to CSV
+- **Fidelity** — Activity & Orders → Download
+- **Merrill Edge** — Accounts → Statements & Documents → Download
+
+Go back as far as possible — the script uses the full history to
+compute cost basis and option P&L.
 
 ### Step 3 — Set up Google Sheets access
 
-Follow the instructions in `docs/google_sheets_setup.md`.
+Follow the instructions in `google-sheets-setup/`.
 
-### Step 4 — Run the script
+### Step 4 — Configure and run
+
+Copy the example config and fill in your details:
 
 ```
-python src/setup_tab.py ALL_TRANS.csv Schwab
+# macOS / Linux / Git Bash
+cp positions/config.toml.example positions/config.toml
+
+# Windows PowerShell
+copy positions\config.toml.example positions\config.toml
 ```
 
-The first time you run it, a browser window will open asking you to authorize
-access to your Google Sheets account. Click Allow. After that it runs silently.
+Then run from the repo root:
 
-The script will work through all your tickers, fetch current stock and option
-prices from Yahoo Finance, and build a tab per ticker plus three summary tabs.
-Depending on how many positions you have, this takes a few minutes.
+```
+uv run positions/run_tracker.py
+```
+
+The first run opens a browser to authorize Google Sheets access.
+After that it runs silently. It fetches live prices from Yahoo Finance
+and rebuilds all tabs from scratch.
 
 ### Step 5 — Update anytime
 
-Download a fresh CSV from Schwab and run the same command. The script clears
-the spreadsheet and rebuilds everything from scratch.
+Download a fresh CSV and run the same command. The script always
+rebuilds from the latest export.
 
 ---
 
@@ -103,7 +111,9 @@ uv run positions/run_tracker.py --brokerage schwab --csv input/OTHER.csv
 
 ## Notes
 
-- Currently supports Schwab CSV exports only
+- Supported brokerages: **Schwab**, **Robinhood**, **Fidelity**,
+  **Merrill Edge** — set `brokerage` in `config.toml` to match your
+  export file
 - Option market values are fetched from Yahoo Finance using the (bid+ask)/2 midpoint
 - The script always deletes and recreates the ticker tab — the Summary tab is preserved
 - Open Calls and Open Puts sections display all currently open contracts for the position
@@ -121,8 +131,9 @@ uv run positions/run_tracker.py --brokerage schwab --csv input/OTHER.csv
 Future features, roughly in priority order.
 
 ### Other broker support
-- Fidelity, Interactive Brokers, E*TRADE — each has its own export format
+- Interactive Brokers, E*TRADE — each has its own export format
 - Goal: same script, same output, regardless of where your account lives
+- Schwab, Robinhood, Fidelity, and Merrill Edge are already supported
 
 ### Audience-requested metrics
 - Open for requests in comments — will track and add the most-asked-for ones

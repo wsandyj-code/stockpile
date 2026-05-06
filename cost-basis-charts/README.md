@@ -5,7 +5,8 @@ built from brokerage transaction exports using Claude Code.
 
 ## What this builds
 
-- Parse Schwab/Robinhood transaction CSV to compute running adjusted cost basis per share
+- Parse brokerage transaction CSV (Schwab, Robinhood, Fidelity,
+  Merrill Edge) to compute running adjusted cost basis per share
 - Fetch historical price data from Yahoo Finance
 - Chart: stock price vs. cost basis over time
 - Chart: cumulative option premium collected over time
@@ -13,7 +14,8 @@ built from brokerage transaction exports using Claude Code.
 
 ## Data inputs
 
-- Brokerage transaction CSV (same format as the Position Tracker project)
+- Brokerage transaction CSV — Schwab, Robinhood, Fidelity, or Merrill
+  Lynch (same parsers as the Position Tracker project)
 - Yahoo Finance historical OHLC via `yfinance`
 
 ## YouTube angle

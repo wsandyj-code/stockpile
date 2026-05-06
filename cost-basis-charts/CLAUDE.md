@@ -48,3 +48,9 @@ uv run cost-basis-charts/run_charts.py --symbol SCHW
 Never use `python` or `python3` directly — they won't have the
 project's dependencies. Run `uv sync` from the repo root after any
 `pyproject.toml` change.
+
+## Output
+
+HTML (and optional PNG) files are written to
+`cost-basis-charts/output/` by default. Override with
+`--output-dir`. The output directory is gitignored.

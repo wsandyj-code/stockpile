@@ -42,13 +42,18 @@ def get_service():
 # ── Core API helpers ──────────────────────────────────────────────────────────
 
 def _execute_with_retry(request, max_retries=5):
+    import socket
     delay = 10
     for attempt in range(max_retries):
         try:
             return request.execute()
         except Exception as e:
-            if hasattr(e, "resp") and e.resp.status == 429 and attempt < max_retries - 1:
-                print(f"  Rate limited, retrying in {delay}s...")
+            is_rate_limit = hasattr(e, "resp") and e.resp.status == 429
+            is_transient = isinstance(e, (ConnectionResetError, ConnectionError,
+                                          TimeoutError, socket.error))
+            if (is_rate_limit or is_transient) and attempt < max_retries - 1:
+                reason = "Rate limited" if is_rate_limit else "Connection error"
+                print(f"  {reason}, retrying in {delay}s... ({e})")
                 time.sleep(delay)
                 delay *= 2
             else:
@@ -299,9 +304,75 @@ def _ensure_summary_tab(service, stab):
         apply_fmt(service, sid, [col_header(sid, 0)])
         return
 
-    # Column layout (0-indexed): A=Position, B=Stock Price, C=Mkt Val, D=Stock Gain,
-    # E=Open Calls MV, F=Strike calls, G=Days Left calls, H=TV Ann Yield calls, I=All Call Results,
-    # J=Open Puts MV, K=Strike puts, L=Days Left puts, M=TV Ann Yield puts, N=All Put Results,
+    def _gip(c1, c2):
+        return {"addConditionalFormatRule": {"rule": {
+            "ranges": [{"sheetId": sid, "startRowIndex": 2, "endRowIndex": 1000,
+                        "startColumnIndex": c1, "endColumnIndex": c2}],
+            "booleanRule": {
+                "condition": {"type": "NUMBER_GREATER", "values": [{"userEnteredValue": "0"}]},
+                "format": {"textFormat": {"foregroundColor": {"red": 0.05, "green": 0.45, "blue": 0.13}}},
+            }}, "index": 0}}
+
+    if stab == "Summary-Closed":
+        # 12-column layout: A=Position, B=Stock Price, C=Mkt Val, D=Stock Gain,
+        # E=All Call Results, F=All Put Results,
+        # G=Dividends, H=Close-out Value, I=Avg Days Held,
+        # J=Amount Invested, K=Overall P/L, L=Ann Yield
+        group_row = ["Underlying Stock", "", "", "", "Calls", "Puts",
+                     "Overall", "", "", "", "", ""]
+        write_range(service, stab, "A1:L1", [group_row])
+        headers = ["Position", "Stock\nPrice", "Underlying\nMkt Val", "Underlying\nGain",
+                   "All Call\nResults", "All Put\nResults",
+                   "Dividends", "Close-out\nValue", "Avg Days\nHeld",
+                   "Amount\nInvested", "Overall\nP/L", "Ann Yield"]
+        write_range(service, stab, "A2:L2", [headers])
+        apply_fmt(service, sid, [
+            {"mergeCells": {"range": {"sheetId": sid, "startRowIndex": 0, "endRowIndex": 1, "startColumnIndex": 0, "endColumnIndex": 4}, "mergeType": "MERGE_ALL"}},
+            {"mergeCells": {"range": {"sheetId": sid, "startRowIndex": 0, "endRowIndex": 1, "startColumnIndex": 6, "endColumnIndex": 12}, "mergeType": "MERGE_ALL"}},
+            {"repeatCell": {"range": {"sheetId": sid, "startRowIndex": 0, "endRowIndex": 1, "startColumnIndex": 0, "endColumnIndex": 4},
+                "cell": {"userEnteredFormat": {"backgroundColor": {"red": 0.24, "green": 0.52, "blue": 0.78}, "textFormat": {"bold": True, "foregroundColor": {"red": 1, "green": 1, "blue": 1}}, "horizontalAlignment": "CENTER"}},
+                "fields": "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment)"}},
+            {"repeatCell": {"range": {"sheetId": sid, "startRowIndex": 0, "endRowIndex": 1, "startColumnIndex": 4, "endColumnIndex": 5},
+                "cell": {"userEnteredFormat": {"backgroundColor": {"red": 0.18, "green": 0.58, "blue": 0.34}, "textFormat": {"bold": True, "foregroundColor": {"red": 1, "green": 1, "blue": 1}}, "horizontalAlignment": "CENTER"}},
+                "fields": "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment)"}},
+            {"repeatCell": {"range": {"sheetId": sid, "startRowIndex": 0, "endRowIndex": 1, "startColumnIndex": 5, "endColumnIndex": 6},
+                "cell": {"userEnteredFormat": {"backgroundColor": {"red": 0.53, "green": 0.25, "blue": 0.63}, "textFormat": {"bold": True, "foregroundColor": {"red": 1, "green": 1, "blue": 1}}, "horizontalAlignment": "CENTER"}},
+                "fields": "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment)"}},
+            {"repeatCell": {"range": {"sheetId": sid, "startRowIndex": 0, "endRowIndex": 1, "startColumnIndex": 6, "endColumnIndex": 12},
+                "cell": {"userEnteredFormat": {"backgroundColor": {"red": 0.30, "green": 0.30, "blue": 0.30}, "textFormat": {"bold": True, "foregroundColor": {"red": 1, "green": 1, "blue": 1}}, "horizontalAlignment": "CENTER"}},
+                "fields": "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment)"}},
+            {"repeatCell": {
+                "range": {"sheetId": sid, "startRowIndex": 1, "endRowIndex": 2, "startColumnIndex": 0, "endColumnIndex": 12},
+                "cell": {"userEnteredFormat": {"backgroundColor": {"red": 0.851, "green": 0.918, "blue": 0.957}, "textFormat": {"bold": True}, "wrapStrategy": "WRAP"}},
+                "fields": "userEnteredFormat(backgroundColor,textFormat,wrapStrategy)"}},
+            # Currency: B-H (1-7), J-K (9-10)
+            {"repeatCell": {
+                "range": {"sheetId": sid, "startRowIndex": 2, "endRowIndex": 1000, "startColumnIndex": 1, "endColumnIndex": 8},
+                "cell": {"userEnteredFormat": {"numberFormat": {"type": "CURRENCY", "pattern": "$#,##0.00;[RED]-$#,##0.00"}}},
+                "fields": "userEnteredFormat.numberFormat"}},
+            {"repeatCell": {
+                "range": {"sheetId": sid, "startRowIndex": 2, "endRowIndex": 1000, "startColumnIndex": 9, "endColumnIndex": 11},
+                "cell": {"userEnteredFormat": {"numberFormat": {"type": "CURRENCY", "pattern": "$#,##0.00;[RED]-$#,##0.00"}}},
+                "fields": "userEnteredFormat.numberFormat"}},
+            # Avg Days Held (I=col 8): integer
+            {"repeatCell": {
+                "range": {"sheetId": sid, "startRowIndex": 2, "endRowIndex": 1000, "startColumnIndex": 8, "endColumnIndex": 9},
+                "cell": {"userEnteredFormat": {"numberFormat": {"type": "NUMBER", "pattern": "0"}}},
+                "fields": "userEnteredFormat.numberFormat"}},
+            # Ann Yield (L=col 11): percent
+            {"repeatCell": {
+                "range": {"sheetId": sid, "startRowIndex": 2, "endRowIndex": 1000, "startColumnIndex": 11, "endColumnIndex": 12},
+                "cell": {"userEnteredFormat": {"numberFormat": {"type": "PERCENT", "pattern": "0.00%"}}},
+                "fields": "userEnteredFormat.numberFormat"}},
+            _gip(3, 4), _gip(4, 5), _gip(5, 6), _gip(6, 7), _gip(7, 8), _gip(10, 11), _gip(11, 12),
+        ])
+        return
+
+    # Summary-Open: 18-column layout
+    # A=Position, B=Stock Price, C=Mkt Val, D=Stock Gain,
+    # E=Open Calls MV, F=Strike calls, G=Days Left calls, H=TV Ann Yield calls,
+    # I=All Call Results, J=Open Puts MV, K=Strike puts, L=Days Left puts,
+    # M=TV Ann Yield puts, N=All Put Results,
     # O=Dividends, P=Adj Cost Basis, Q=Close-out Value, R=Overall P/L
     group_row = ["Underlying Stock", "", "", "",
                  "Calls", "", "", "", "",
@@ -315,15 +386,6 @@ def _ensure_summary_tab(service, stab):
                "Dividends", "Adj Cost\nBasis",
                "Close-out\nValue", "Overall\nP/L"]
     write_range(service, stab, "A2:R2", [headers])
-
-    def _gip(c1, c2):
-        return {"addConditionalFormatRule": {"rule": {
-            "ranges": [{"sheetId": sid, "startRowIndex": 2, "endRowIndex": 1000,
-                        "startColumnIndex": c1, "endColumnIndex": c2}],
-            "booleanRule": {
-                "condition": {"type": "NUMBER_GREATER", "values": [{"userEnteredValue": "0"}]},
-                "format": {"textFormat": {"foregroundColor": {"red": 0.05, "green": 0.45, "blue": 0.13}}},
-            }}, "index": 0}}
 
     def _near_money(col_letter, col_idx):
         """Bold purple when strike is within 10% of the stock price in col B."""
@@ -411,6 +473,26 @@ def _write_summary_row(service, tab_name, status, issues, show_calls=True, show_
     if status == "Inconsistent":
         write_range(service, stab, f"A{row_num}:C{row_num}",
                     [[tab_name, status, "; ".join(issues)]])
+    elif status == "Closed":
+        # 12-column layout for Summary-Closed
+        # E=All Call Results (B15=Covered Call Results), F=All Put Results (B{p+5}=Put Results)
+        # G=Dividends, H=Close-out Value, I=Avg Days Held,
+        # J=Amount Invested (H{i+4}), K=Overall P/L, L=Ann Yield (K/J*(365/I))
+        new_row = [
+            tab_name,
+            f"='{tab_name}'!B5",                                          # B: Stock Price
+            f"='{tab_name}'!E6",                                          # C: Mkt Val
+            f"='{tab_name}'!H4",                                          # D: Stock Gain
+            f"='{tab_name}'!B15" if show_calls else 0,                    # E: All Call Results
+            f"='{tab_name}'!B{p+5}" if show_puts else 0,                  # F: All Put Results
+            f"='{tab_name}'!B{i+1}",                                      # G: Dividends
+            f"='{tab_name}'!H{i+2}",                                      # H: Close-out Value
+            f"='{tab_name}'!H7",                                          # I: Avg Days Held
+            f"='{tab_name}'!H{i+1}",                                      # J: Amount Invested
+            f"=D{row_num}+E{row_num}+F{row_num}+G{row_num}",             # K: Overall P/L
+            f"=IFERROR(K{row_num}/J{row_num}*(365/I{row_num}),0)",       # L: Ann Yield
+        ]
+        write_range(service, stab, f"A{row_num}:L{row_num}", [new_row])
     else:
         new_row = [
             tab_name,
@@ -462,6 +544,54 @@ def write_summary_totals(service, stab):
         return
     last_data = max(data_rows)
     totals_row = last_data + 2
+
+    if stab == "Summary-Closed":
+        write_range(service, stab, f"A{last_data+1}:L{totals_row}", [[""] * 12, [""] * 12])
+        total_row_data = [
+            "TOTALS", "",
+            f"=SUM(C3:C{last_data})", f"=SUM(D3:D{last_data})",
+            f"=SUM(E3:E{last_data})", f"=SUM(F3:F{last_data})",
+            f"=SUM(G3:G{last_data})", f"=SUM(H3:H{last_data})",
+            "",
+            f"=SUM(J3:J{last_data})",
+            f"=SUM(K3:K{last_data})",
+            "",
+        ]
+        write_range(service, stab, f"A{totals_row}:L{totals_row}", [total_row_data])
+        apply_fmt(service, summary_sheet_id, [
+            {"repeatCell": {
+                "range": {"sheetId": summary_sheet_id,
+                          "startRowIndex": totals_row - 1, "endRowIndex": totals_row,
+                          "startColumnIndex": 0, "endColumnIndex": 12},
+                "cell": {"userEnteredFormat": {
+                    "textFormat": {"bold": True},
+                    "backgroundColor": {"red": 0.851, "green": 0.918, "blue": 0.957},
+                    "borders": {"top": {"style": "SOLID", "width": 2,
+                                        "color": {"red": 0, "green": 0, "blue": 0}}},
+                }},
+                "fields": "userEnteredFormat(textFormat,backgroundColor,borders)",
+            }},
+            {"repeatCell": {
+                "range": {"sheetId": summary_sheet_id,
+                          "startRowIndex": totals_row - 1, "endRowIndex": totals_row,
+                          "startColumnIndex": 1, "endColumnIndex": 8},
+                "cell": {"userEnteredFormat": {
+                    "numberFormat": {"type": "CURRENCY", "pattern": "$#,##0.00;[RED]-$#,##0.00"},
+                }},
+                "fields": "userEnteredFormat.numberFormat",
+            }},
+            {"repeatCell": {
+                "range": {"sheetId": summary_sheet_id,
+                          "startRowIndex": totals_row - 1, "endRowIndex": totals_row,
+                          "startColumnIndex": 9, "endColumnIndex": 11},
+                "cell": {"userEnteredFormat": {
+                    "numberFormat": {"type": "CURRENCY", "pattern": "$#,##0.00;[RED]-$#,##0.00"},
+                }},
+                "fields": "userEnteredFormat.numberFormat",
+            }},
+        ])
+        print(f"  Summary totals written to row {totals_row}.")
+        return
 
     write_range(service, stab, f"A{last_data+1}:R{totals_row}", [[""] * 18, [""] * 18])
     total_row_data = [

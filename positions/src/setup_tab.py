@@ -10,6 +10,110 @@ tabs and an Other Transactions tab. Live prices are fetched from Yahoo Finance.
 
 Requirements:
     pip install google-auth google-auth-oauthlib google-api-python-client yfinance
+
+================================================================================
+YOUTUBE PUBLISHING CHECKLIST — drive views for the setup-video release
+================================================================================
+
+BEFORE PUBLISHING (the days leading up to release)
+--------------------------------------------------
+ 1. Title — lead with the outcome, not the tool. Two patterns that work for
+    niche finance/dev content:
+      "I built a free tool that tracks covered calls across every brokerage"
+      "One command turns my Schwab CSV into a live options dashboard"
+    Draft 3–5 variants. Pick the one that promises a result a viewer wants.
+    Avoid bracket clutter ("[Tutorial]", "[2026]") — kills CTR.
+
+ 2. Thumbnail — bigger payoff than the title for cold-traffic CTR.
+      • High contrast, 3–5 words max (large, sans-serif, bold).
+      • Show the *result* (the formatted Google Sheet) not the code.
+      • Add a face/expression if you're on camera; eye contact > none.
+      • A/B test using YouTube Studio's built-in thumbnail test.
+
+ 3. Hook (first 15 seconds) — state problem + show solution. No long intros,
+    no "hey guys welcome back". Cut straight to the working dashboard, then
+    explain what it is. Retention at 0:30 dictates everything downstream.
+
+ 4. Chapters — required for tutorials. Counterintuitively, letting viewers
+    skip improves session metrics because non-skippers churn entirely.
+    Suggested chapters: Problem → Demo → Setup → Each broker → Customizing
+    → Roadmap. Mark them in the description as `0:00 Title`.
+
+ 5. Description — first 2 lines are above the fold on mobile. Put the value
+    prop + GitHub link there. Then chapters, then the long form. Include
+    keywords naturally: covered calls, sold puts, options tracker, Schwab,
+    Robinhood, Fidelity, Merrill Edge, Google Sheets, Python.
+
+ 6. Tags — mix broad ("covered calls tracker") and long-tail
+    ("schwab csv export python"). Long-tail is where small channels rank.
+
+ 7. Captions — upload corrected captions. YouTube indexes them for search.
+    Auto-captions on technical jargon ("covered call", "ITM", broker names)
+    are usually wrong; fix them.
+
+ 8. End screen — last 20 seconds. Point to: subscribe button + your single
+    most relevant prior video + a card to the GitHub repo.
+
+ 9. Pre-publish dry run — set the video to Unlisted, watch it end-to-end on
+    your phone (most viewers will). Listen for audio drops, dead air,
+    pacing problems. Re-edit if anything feels slow.
+
+10. Seed comment — pre-write a comment to pin at publish time. Include the
+    GitHub link, a timestamp index, and ONE open question that invites
+    replies ("which broker should I support next?"). Engagement velocity
+    in the first hour is a major ranking signal.
+
+11. Community tab teaser — 24h before publish, post a screenshot of the
+    finished sheet in the YouTube Community tab. Builds anticipation,
+    notifies subscribers, and pre-warms the algorithm.
+
+12. Plan distribution — list the subreddits / forums / Discords you'll
+    share to. Read each sub's self-promotion rules in advance; some
+    require a 9:1 contribution-to-promotion ratio.
+
+DURING PUBLISHING (the day of, and the first 24 hours)
+------------------------------------------------------
+ 1. Time the upload to your audience. US covered-call traders skew older
+    and weekday 9–5 ET is dead (they're at work). Saturday morning ET
+    or weekday evening 7–10 ET tend to perform best for finance hobby
+    content. Avoid days with big market news (CPI, FOMC, earnings of a
+    mega-cap) — viewer attention goes there instead.
+
+ 2. Use a Premiere with a 30–60 minute countdown. The live chat creates
+    early engagement signals YouTube weighs heavily, and the "Premiere"
+    badge attracts notification clicks the regular upload doesn't.
+
+ 3. Pin your seed comment the moment it's live.
+
+ 4. Reply to EVERY comment in the first 2 hours. Even just hearting it
+    counts. Reply velocity outweighs reply quality for ranking.
+
+ 5. Share to 3–5 targeted subreddits within the first 30 minutes:
+      r/options, r/CoveredCalls, r/thetagang, r/algotrading,
+      r/PersonalFinance (only if framed for a general audience).
+    Lead with the value, not the link. A separate "[Tool I built]" post
+    pointing to the GitHub repo (with the YouTube link in the README)
+    often does better than dropping the YouTube link directly — Reddit
+    penalizes overt video drops.
+
+ 6. Tweet/X post with screenshot + GitHub link. Reply to your own tweet
+    with the YouTube link 10 minutes later — top-level tweets with a
+    YouTube URL get suppressed.
+
+ 7. Notify your direct channels (Discord, Telegram, email list) within
+    30 minutes of publish. The early-hour view spike is what tells the
+    algorithm to push the video to non-subscribers.
+
+ 8. Watch retention live in YouTube Studio. The drop-off points are the
+    single most valuable feedback you'll get for your next video.
+
+ 9. 24-hour CTR check. If CTR < 4%, swap the thumbnail. If CTR is fine
+    but watch time is low, the title oversold — soften it.
+
+10. Don't edit the title/thumbnail/description in the first 4 hours
+    unless something is broken — early edits reset some ranking signals.
+    After that, iterate freely.
+================================================================================
 """
 
 import re
@@ -54,7 +158,7 @@ def _txn_display(row):
 def process_ticker(ticker, transactions, brokerage, service,
                    current_price=None, current_call_value=None, current_put_value=None):
     """Build/update a single ticker tab and its Summary row."""
-    tab_name = f"{ticker}-{brokerage}"
+    tab_name = ticker
     open_positions = detect_open_positions(transactions)
     status, issues = compute_status(transactions, open_positions)
 
@@ -217,8 +321,8 @@ def process_ticker(ticker, transactions, brokerage, service,
         sheets.write_range(service, tab_name, "K17", [[tv_call_text]])
     if show_puts:
         sheets.write_range(service, tab_name, f"K{p+7}", [[tv_put_text]])
-    sheets.write_range(service, tab_name, f"K{i+2}", [[ic_yield_text]])
-    sheets.write_range(service, tab_name, f"K{i+3}", [[cov_yield_text]])
+    sheets.write_range(service, tab_name, f"K{i+4}", [[ic_yield_text]])
+    sheets.write_range(service, tab_name, f"K{i+5}", [[cov_yield_text]])
 
     def footnote_merge(row0):
         return {"mergeCells": {
@@ -251,14 +355,14 @@ def process_ticker(ticker, transactions, brokerage, service,
            sheets.light_bg(sheet_id, p0 + 7, 6, p0 + 8, 8),
            sheets.light_bg(sheet_id, p0 + 7, 10, p0 + 8, 26),
            footnote_overflow(p0 + 7)] if show_puts else []),
-        footnote_merge(i0 + 2), footnote_merge(i0 + 3),
+        footnote_merge(i0 + 4), footnote_merge(i0 + 5),
         sheets.light_bg(sheet_id, 5, 0, 6, 2),
         sheets.light_bg(sheet_id, 5, 10, 6, 26),
-        sheets.light_bg(sheet_id, i0 + 2, 6, i0 + 3, 8),
-        sheets.light_bg(sheet_id, i0 + 2, 10, i0 + 3, 26),
-        sheets.light_bg(sheet_id, i0 + 3, 6, i0 + 4, 8),
-        sheets.light_bg(sheet_id, i0 + 3, 10, i0 + 4, 26),
-        footnote_overflow(4), footnote_overflow(i0 + 2), footnote_overflow(i0 + 3),
+        sheets.light_bg(sheet_id, i0 + 4, 6, i0 + 5, 8),
+        sheets.light_bg(sheet_id, i0 + 4, 10, i0 + 5, 26),
+        sheets.light_bg(sheet_id, i0 + 5, 6, i0 + 6, 8),
+        sheets.light_bg(sheet_id, i0 + 5, 10, i0 + 6, 26),
+        footnote_overflow(4), footnote_overflow(i0 + 4), footnote_overflow(i0 + 5),
     ]
     if issues:
         merge_fmt += [
@@ -289,8 +393,8 @@ def process_ticker(ticker, transactions, brokerage, service,
         sheets.plain_number(sheet_id, i0 + 2, 1, i0 + 3, 2),    # Dividend Count
         sheets.currency(sheet_id, i0 + 3, 1, i0 + 5, 2),        # Net premiums
         sheets.currency(sheet_id, i0 + 1, 4, i0 + 6, 5),        # P&L data
-        sheets.currency(sheet_id, i0 + 1, 7, i0 + 2, 8),        # Close-out Value
-        sheets.percent(sheet_id, i0 + 2, 7, i0 + 4, 8),         # Ann Yields
+        sheets.currency(sheet_id, i0 + 1, 7, i0 + 4, 8),        # Amount Invested / Close-out / Total Income
+        sheets.percent(sheet_id, i0 + 4, 7, i0 + 6, 8),         # Ann Yields
         sheets.currency(sheet_id, txn_row - 1, 7, 1000, 10),
         sheets.green_if_positive(sheet_id, 3, 7, 5, 8),
         sheets.green_if_positive(sheet_id, 7, 7, 8, 8),
@@ -298,7 +402,8 @@ def process_ticker(ticker, transactions, brokerage, service,
         sheets.green_if_positive(sheet_id, i0 + 1, 4, i0 + 6, 5),  # P&L breakdown
         sheets.green_if_positive(sheet_id, i0 + 1, 1, i0 + 2, 2),  # Dividends
         sheets.green_if_positive(sheet_id, i0 + 3, 1, i0 + 5, 2),  # Net premiums
-        sheets.green_if_positive(sheet_id, i0 + 2, 7, i0 + 4, 8),  # Ann Yields
+        sheets.green_if_positive(sheet_id, i0 + 1, 7, i0 + 4, 8),  # Currency returns
+        sheets.green_if_positive(sheet_id, i0 + 4, 7, i0 + 6, 8),  # Ann Yields
     ]
 
     if show_calls:
@@ -360,7 +465,13 @@ def _load_parser(brokerage: str):
     if b == "robinhood":
         from stocks_shared.parsers.robinhood import parse_all_transactions
         return parse_all_transactions
-    print(f"Error: Unknown brokerage '{brokerage}'. Supported: Schwab")
+    if b == "fidelity":
+        from stocks_shared.parsers.fidelity import parse_all_transactions
+        return parse_all_transactions
+    if b == "merrill":
+        from stocks_shared.parsers.merrill import parse_all_transactions
+        return parse_all_transactions
+    print(f"Error: Unknown brokerage '{brokerage}'. Supported: schwab, robinhood, fidelity, merrill")
     sys.exit(1)
 
 

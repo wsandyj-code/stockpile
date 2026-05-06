@@ -167,15 +167,18 @@ def build_sections(ticker, open_positions, last_row, avg_held_anchor=None,
             ["Total P&L", f"=E{i+1}+E{i+2}+E{i+3}+E{i+4}"],
         ],
 
-        f"G{i}:H{i+3}": [
+        f"G{i}:H{i+5}": [
             ["RETURNS", ""],
+            ["Amount Invested",
+             f"=-SUMPRODUCT((C${T}:C${L}=\"Stock\")*(B${T}:B${L}=\"Buy\")*J${T}:J${L})"],
             ["Close-out Value",
              f"=SUMPRODUCT((C${T}:C${L}=\"Stock\")*(B${T}:B${L}=\"Sell\")*J${T}:J${L})"
              if status == "Closed" else "=E6+B7+B8"],
+            ["Total Income", f"=E{i+5}-E{i+1}"],
             ["Ann Yield on Invested Capital",
-             f"=IFERROR(E{i+5}/(-SUMPRODUCT((C${T}:C${L}=\"Stock\")*(B${T}:B${L}=\"Buy\")*J${T}:J${L}))*(365/H7),0)"
+             f"=IFERROR(E{i+5}/H{i+1}*(365/H7),0)"
              if status == "Closed" else f"=IFERROR(-E{i+5}/E7*(365/H7),0)"],
-            [f"Ann Yield on Close-out Value", f"=IFERROR(E{i+5}/H{i+1}*(365/H7),0)"],
+            ["Ann Yield on Close-out Value", f"=IFERROR(E{i+5}/H{i+2}*(365/H7),0)"],
         ],
 
         f"A{txn_row-2}:K{txn_row-1}": [

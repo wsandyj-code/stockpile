@@ -11,9 +11,13 @@ build/
 config.toml
 *.json
 !config.toml.example
+.env
 
 # Brokerage CSV exports
 *.csv
+
+# Brokerage statement PDFs
+input/*.pdf
 
 # Logs
 *.log
@@ -22,8 +26,9 @@ config.toml
 .idea/
 .vscode/
 
-# Chart output
+# Tool output
 charts/
+output/
 *.html
 
 # OS

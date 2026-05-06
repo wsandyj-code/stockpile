@@ -1,27 +1,38 @@
 # Copy this file to config.toml and fill in your details.
-# config.toml is gitignored — your sheet IDs and file paths will never be committed.
+# config.toml is gitignored — your sheet IDs and file paths will never be
+# committed.
 #
 # Add one [[accounts]] entry per brokerage account. Each entry needs:
-#   brokerage — which parser to use (schwab, robinhood)
+#   brokerage — which parser to use (schwab, robinhood, fidelity, merrill)
 #   sheet_id  — the Google Sheets ID for that account's spreadsheet
-#   csv       — path to the exported transaction CSV (relative to repo root, or absolute)
+#   csv       — path to the exported transaction CSV
+#               (relative to repo root, or absolute)
 
 [[accounts]]
 brokerage = "schwab"
 sheet_id  = "your-sheet-id-here"
 csv       = "input/schwab.csv"
 
+# [[accounts]]
+# brokerage = "robinhood"
+# sheet_id  = "your-robinhood-sheet-id-here"
+# csv       = "input/robinhood.csv"
+
+# [[accounts]]
+# brokerage = "fidelity"
+# sheet_id  = "your-fidelity-sheet-id-here"
+# csv       = "input/fidelity.csv"
+
+# [[accounts]]
+# brokerage = "merrill"
+# sheet_id  = "your-merrill-sheet-id-here"
+# csv       = "input/merrill.csv"
+
 # Multiple accounts for the same brokerage — just add another entry:
 # [[accounts]]
 # brokerage = "schwab"
 # sheet_id  = "your-ira-sheet-id-here"
 # csv       = "input/schwab_ira.csv"
-
-# Other brokerages work the same way once supported:
-# [[accounts]]
-# brokerage = "robinhood"
-# sheet_id  = "your-robinhood-sheet-id-here"
-# csv       = "input/robinhood.csv"
 
 # Optional: override default credential file paths.
 # Defaults shown — only uncomment if you need different paths.

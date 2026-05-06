@@ -21,15 +21,19 @@ def _get_parser(brokerage: str):
         from stocks_shared.parsers.schwab import parse_all_transactions
     elif b == "robinhood":
         from stocks_shared.parsers.robinhood import parse_all_transactions
+    elif b == "fidelity":
+        from stocks_shared.parsers.fidelity import parse_all_transactions
+    elif b == "merrill":
+        from stocks_shared.parsers.merrill import parse_all_transactions
     else:
-        sys.exit(f"Unknown brokerage '{brokerage}'. Supported: schwab, robinhood")
+        sys.exit(f"Unknown brokerage '{brokerage}'. Supported: schwab, robinhood, fidelity, merrill")
     return parse_all_transactions
 
 
 def main():
     parser = argparse.ArgumentParser(description="Generate cost basis charts from a brokerage CSV")
     parser.add_argument("--csv", metavar="FILE", help="Override the CSV path from config.toml")
-    parser.add_argument("--brokerage", metavar="NAME", choices=["schwab", "robinhood"],
+    parser.add_argument("--brokerage", metavar="NAME", choices=["schwab", "robinhood", "fidelity", "merrill"],
                         help="Only run accounts for this brokerage")
     parser.add_argument("--symbol", metavar="TICKER",
                         help="Chart only this symbol (overrides config.toml symbols list)")
