@@ -93,9 +93,9 @@ def main() -> None:
     parser.add_argument(
         "--max-delta",
         type=float,
-        default=0.50,
+        default=0.75,
         metavar="D",
-        help="Exclude options where abs(delta) > D (default: 0.50)",
+        help="Exclude options where abs(delta) > D (default: 0.75)",
     )
     parser.add_argument(
         "--html",

@@ -117,11 +117,42 @@ gaps — under three percentage points — mean the chain is
 uniformly priced and the ranking is mostly noise. Five or more
 points above the line is a genuine signal.
 
-*[SCROLL DOWN TO THE TABLE]*
+*[SCROLL DOWN TO THE TABLES]*
 
-Below the chart, the same options appear ranked in a table.
-Same data, different format. The IV+pp column matches the dot
-colors. Two more things in the table worth knowing.
+Below the chart there are two tables.
+
+The first is the chain view. It shows every option in the
+expiration you have selected in the chart dropdown, sorted by
+strike — like reading a real option chain from your broker.
+The rows are shaded: green means IV+pp is meaningfully above
+the average for that expiration, gray means it's in the noise
+floor, red means it's below average.
+
+*[POINT TO ROW SHADING IN CHAIN VIEW]*
+
+This is where you actually pick your strike. The whole
+expiration at a glance, shading doing the filtering for you —
+you can see in seconds which strikes have genuinely rich
+premium and which ones are unremarkable.
+
+*[POINT TO RED BID/ASK CELLS]*
+
+Two other signals in the table. Red Bid and Ask cells mean
+the spread is wider than typical for this chain — the gap
+between what buyers will pay and sellers will accept. A wide
+spread means your real execution price may land meaningfully
+worse than the mid suggests. And a red OI cell means open
+interest is low — barely past the filter threshold — which
+makes it harder to fill at a good price. Hover the question
+mark on any column header and it explains exactly what
+triggers the color.
+
+*[POINT TO SECOND TABLE — "TOP CANDIDATES — ALL CHAINS"]*
+
+Below that is the top candidates table — the highest-ranked
+options by IV+pp pulled from every expiration. The chain view
+says "show me everything for January, sorted by strike." This
+one says "show me the best ten, regardless of expiration."
 
 *[POINT TO DELTA COLUMN]*
 
@@ -204,11 +235,12 @@ richer the premium relative to its neighbors.
 
 *[POINT TO DELTA SLIDER]*
 
-Up top there's a delta range slider. Default is 0.10 to 0.50 —
-real candidates, not deep in the money or lottery tickets. A
-lot of covered call sellers narrow this to 0.25 to 0.40 —
-enough premium to be worthwhile, enough strike distance to not
-get called away every time the stock moves.
+Up top there's a delta range slider. Default is 0.10 to 0.75 —
+a wide range that covers everything from conservative out-of-the-
+money strikes to fairly deep in-the-money ones. A lot of covered
+call sellers narrow this to 0.25 to 0.40 — enough premium to be
+worthwhile, enough strike distance to not get called away every
+time the stock moves.
 
 *[DRAG SLIDER TO 0.25–0.40, CLICK SCAN]*
 
@@ -224,12 +256,31 @@ one at a time. Use this dropdown to switch between them — you'll
 see the surface shape change, and which strikes are rich shifts
 with it.
 
-*[POINT TO EXPIRATION COLUMN IN TABLE — EARNINGS TAG]*
+*[SCROLL DOWN — CHAIN VIEW TABLE UPDATES TO MATCH]*
 
-See the 2E next to one of these expirations? That means two
-earnings events fall before this expiration. IV tends to spike
-around earnings — that's the market pricing in uncertainty, not
-a free lunch. Worth knowing before you commit.
+Switching the dropdown also updates the chain view table below.
+It always shows the full option chain for whichever expiration
+you're looking at, sorted by strike. So the workflow is: pick
+an expiration in the dropdown, read the chain view for that
+expiration, then check the top candidates below for the best
+across all expirations.
+
+*[POINT TO CHAIN VIEW TITLE — EARNINGS DATE]*
+
+The chain view title shows you the expiration date and, if any
+earnings event falls before it, the date of the next one and
+how many days away it is — something like "Jan 15 '27 — next
+earnings Oct 22 (167d)." IV spikes around earnings as the
+market prices in uncertainty; a lot of that elevated premium
+may evaporate the morning after the announcement whether or
+not the stock moves much. Worth factoring in before you
+commit.
+
+*[POINT TO EXPIRATION COLUMN IN TOP CANDIDATES TABLE]*
+
+In the top candidates table, the Expiration column uses a
+shorthand: `2E` means two earnings events fall before that
+expiration.
 
 *[CLICK "DOWNLOAD HTML REPORT" BUTTON]*
 
@@ -467,10 +518,14 @@ I don't have into the conversation.
 *[SHOW CLAUDE CODE TERMINAL — BRIEF DEMO OF ASKING FOR A
 SMALL CHANGE]*
 
-And extending it works exactly the same way. If I want to add
-a feature — say, filtering by bid-ask spread as a percentage
-of mid to weed out illiquid options — I just describe it and
-Claude adds it. No documentation to read, no library to learn.
+And extending it works exactly the same way. I've done it
+several times since the initial build — adding a full chain
+view table sorted by strike with green-gray-red IV+pp row
+shading, flagging wide bid-ask spreads and low open interest
+with red cell highlights, putting the next earnings date right
+in the table title with a days-to-go count. Each of those was
+a short conversation. Describe what you want, Claude builds it.
+No documentation to read, no library to learn.
 
 The whole thing is open source. Every line is on GitHub. You
 can read it, fork it, change it, or just use it as-is.
@@ -627,7 +682,12 @@ and rolling existing positions.
   where they should be
 - Ranks by IV excess — the gap between actual and expected
   implied volatility
-- Filters by delta, open interest, and days to expiration
+- Per-expiration chain view sorted by strike: row shading
+  shows which strikes are rich, average, or weak at a glance
+- Flags wide bid-ask spreads and low open interest with red
+  cell highlights so you spot execution risk before acting
+- Earnings dates shown in chain title with days-to-go count
+- Filters by delta (default 0.10–0.75), open interest, DTE
 - Roll mode: shows net credit for rolling an existing position
 - Portfolio scan: drag-and-drop your brokerage CSV and scan
   every open position automatically

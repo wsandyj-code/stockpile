@@ -144,7 +144,29 @@ def _fetch_position(ticker: str, min_dte: int):
 
 # ── Display helpers ──────────────────────────────────────────────────────────
 
-def _show_df(sub: pd.DataFrame, roll_close_cost: float | None = None) -> None:
+def _wide_spread_mask(bid: pd.Series, ask: pd.Series,
+                      mid: pd.Series) -> list[bool]:
+    ratios = ((ask - bid) / mid.clip(lower=0.01)).tolist()
+    vals   = sorted(ratios)
+    median = vals[len(vals) // 2] if vals else 0.0
+    thresh = max(median * 1.5, 0.15)
+    return [r > thresh for r in ratios]
+
+
+def _low_oi_mask(oi: pd.Series, min_oi: int) -> list[bool]:
+    thresh = max(min_oi * 2, 10)
+    return [v < thresh for v in oi.tolist()]
+
+
+_CELL_RED  = "background-color: rgba(239,68,68,0.40)"
+_BID_HELP  = ("Red: spread is wider than 1.5× the median for this table"
+              " — higher execution cost.")
+_OI_HELP   = ("Red: OI is below 2× the min OI filter"
+              " — limited liquidity, harder to fill at a good price.")
+
+
+def _show_df(sub: pd.DataFrame, roll_close_cost: float | None = None,
+             min_oi: int = 0) -> None:
     if sub.empty:
         st.info("No options match the current filters.")
         return
@@ -165,24 +187,41 @@ def _show_df(sub: pd.DataFrame, roll_close_cost: float | None = None) -> None:
         "Delta":  sub["delta"].round(2),
         "Ann%":   sub["ann_yield_pct"].round(1),
         "OI":     sub["open_interest"],
+        "Vol":    sub["volume"],
     })
     if roll_close_cost is not None:
         disp["NetCr"] = (sub["mid"] - roll_close_cost).round(2)
 
+    wide = _wide_spread_mask(sub["bid"], sub["ask"], sub["mid"])
+    lo   = _low_oi_mask(sub["open_interest"], min_oi)
+
+    styled = (
+        disp.style
+        .apply(lambda _: [_CELL_RED if w else "" for w in wide],
+               subset=["Bid", "Ask"])
+        .apply(lambda _: [_CELL_RED if l else "" for l in lo],
+               subset=["OI"])
+    )
+
     col_cfg = {
-        "Bid":   st.column_config.NumberColumn("Bid",   format="$%.2f"),
-        "Ask":   st.column_config.NumberColumn("Ask",   format="$%.2f"),
+        "Bid":   st.column_config.NumberColumn("Bid",   format="$%.2f",
+                                               help=_BID_HELP),
+        "Ask":   st.column_config.NumberColumn("Ask",   format="$%.2f",
+                                               help=_BID_HELP),
         "Mid":   st.column_config.NumberColumn("Mid",   format="$%.2f"),
         "IV%":   st.column_config.NumberColumn("IV%",   format="%.1f%%"),
         "IV+pp": st.column_config.NumberColumn("IV+pp", format="%+.1f pp"),
         "Delta": st.column_config.NumberColumn("Delta", format="%.2f"),
         "Ann%":  st.column_config.NumberColumn("Ann%",  format="%.1f%%"),
-        "OI":    st.column_config.NumberColumn("OI",    format="%d"),
+        "OI":    st.column_config.NumberColumn("OI",    format="%d",
+                                               help=_OI_HELP),
+        "Vol":   st.column_config.NumberColumn("Vol",   format="%d"),
     }
     if roll_close_cost is not None:
-        col_cfg["NetCr"] = st.column_config.NumberColumn("Net Credit", format="$%+.2f")
+        col_cfg["NetCr"] = st.column_config.NumberColumn("Net Credit",
+                                                         format="$%+.2f")
 
-    st.dataframe(disp, column_config=col_cfg, hide_index=True,
+    st.dataframe(styled, column_config=col_cfg, hide_index=True,
                  use_container_width=True)
 
 
@@ -379,6 +418,101 @@ def _show_iv_chart(df: pd.DataFrame, spot: float, mode: str,
     )
 
 
+def _show_chain_table(df_exp: pd.DataFrame, buy: bool, mode: str,
+                      roll_close_cost: float | None = None,
+                      min_oi: int = 0) -> None:
+    """All options for one expiration, sorted by strike, rows shaded by IV+pp."""
+    if df_exp.empty:
+        st.info("No options for this expiration after filters.")
+        return
+
+    df_s = df_exp.sort_values(["strike", "type"]).reset_index(drop=True)
+
+    cols: dict = {}
+    if mode == "both":
+        cols["Type"] = df_s["type"].str.capitalize()
+    cols.update({
+        "Strike": df_s["strike"].apply(lambda x: f"${x:.0f}"),
+        "DTE":    df_s["dte"].astype(int),
+        "Bid":    df_s["bid"].round(2),
+        "Ask":    df_s["ask"].round(2),
+        "Mid":    df_s["mid"].round(2),
+        "IV%":    (df_s["iv"] * 100).round(1),
+        "IV+pp":  (df_s["iv_excess"] * 100).round(1),
+        "Delta":  df_s["delta"].round(2),
+        "Ann%":   df_s["ann_yield_pct"].round(1),
+        "OI":     df_s["open_interest"],
+        "Vol":    df_s["volume"],
+    })
+    if roll_close_cost is not None:
+        cols["NetCr"] = (df_s["mid"] - roll_close_cost).round(2)
+    disp = pd.DataFrame(cols)
+
+    # Row background: IV+pp signal vs 3pp noise floor.
+    _NOISE = 0.03
+    iv_vals = df_s["iv_excess"].tolist()
+    signals = [-v if buy else v for v in iv_vals]
+
+    all_noise = all(abs(v) < _NOISE for v in iv_vals)
+    if all_noise:
+        best_i  = signals.index(max(signals))
+        worst_i = signals.index(min(signals))
+
+    max_pos = max((s for s in signals if s >= _NOISE), default=_NOISE)
+    max_neg = max((abs(s) for s in signals if s <= -_NOISE), default=_NOISE)
+
+    def _row_bg(row: pd.Series) -> list[str]:
+        i = int(row.name)
+        s = signals[i]
+        if all_noise:
+            if i == best_i:
+                bg = "background-color: rgba(34,197,94,0.40)"
+            elif i == worst_i:
+                bg = "background-color: rgba(239,68,68,0.40)"
+            else:
+                bg = "background-color: rgba(100,116,139,0.18)"
+        elif s >= _NOISE:
+            bg = f"background-color: rgba(34,197,94,{s/max_pos*0.50:.2f})"
+        elif s <= -_NOISE:
+            bg = f"background-color: rgba(239,68,68,{abs(s)/max_neg*0.45:.2f})"
+        else:
+            bg = "background-color: rgba(100,116,139,0.18)"
+        return [bg] * len(row)
+
+    # Cell-level overrides for spread and OI (applied after row bg, so they win).
+    wide = _wide_spread_mask(df_s["bid"], df_s["ask"], df_s["mid"])
+    lo   = _low_oi_mask(df_s["open_interest"], min_oi)
+
+    styled = (
+        disp.style
+        .apply(_row_bg, axis=1)
+        .apply(lambda _: [_CELL_RED if w else "" for w in wide],
+               subset=["Bid", "Ask"])
+        .apply(lambda _: [_CELL_RED if l else "" for l in lo],
+               subset=["OI"])
+    )
+
+    col_cfg = {
+        "Bid":   st.column_config.NumberColumn("Bid",   format="$%.2f",
+                                               help=_BID_HELP),
+        "Ask":   st.column_config.NumberColumn("Ask",   format="$%.2f",
+                                               help=_BID_HELP),
+        "Mid":   st.column_config.NumberColumn("Mid",   format="$%.2f"),
+        "IV%":   st.column_config.NumberColumn("IV%",   format="%.1f%%"),
+        "IV+pp": st.column_config.NumberColumn("IV+pp", format="%+.1f pp"),
+        "Delta": st.column_config.NumberColumn("Delta", format="%.2f"),
+        "Ann%":  st.column_config.NumberColumn("Ann%",  format="%.1f%%"),
+        "OI":    st.column_config.NumberColumn("OI",    format="%d",
+                                               help=_OI_HELP),
+        "Vol":   st.column_config.NumberColumn("Vol",   format="%d"),
+    }
+    if roll_close_cost is not None:
+        col_cfg["NetCr"] = st.column_config.NumberColumn("Net Credit",
+                                                         format="$%+.2f")
+    st.dataframe(styled, column_config=col_cfg, hide_index=True,
+                 use_container_width=True)
+
+
 def _show_scan_results(df: pd.DataFrame, mode: str, buy: bool,
                        roll_close_cost: float | None,
                        min_oi: int, top_n: int) -> None:
@@ -394,7 +528,7 @@ def _show_scan_results(df: pd.DataFrame, mode: str, buy: bool,
         sub = sub[sub["open_interest"] >= min_oi].head(top_n)
         if len(to_show) > 1:
             st.subheader(type_labels[opt_type])
-        _show_df(sub, roll_close_cost)
+        _show_df(sub, roll_close_cost, min_oi)
 
 
 # ── Tab: Single Ticker ───────────────────────────────────────────────────────
@@ -464,7 +598,7 @@ def _tab_single() -> None:
                                  key="s_min_oi")
     with n4:
         delta_range = st.slider("Delta Range (abs value)", 0.0, 1.0,
-                                (0.10, 0.50), step=0.05, key="s_delta")
+                                (0.10, 0.75), step=0.05, key="s_delta")
     with n5:
         top_n = st.number_input("Top N", value=10, min_value=1,
                                 max_value=50, key="s_top")
@@ -572,7 +706,24 @@ def _tab_single() -> None:
     _show_iv_chart(df_filt, spot, mode_r, res["min_oi"], res["top_n"],
                    buy_r, ticker=ticker_r, key_prefix="s")
 
-    st.subheader("Top candidates")
+    chosen_exp = st.session_state.get("s_chart_exp")
+    if chosen_exp:
+        df_chain = df_filt[df_filt["expiration"] == chosen_exp].copy()
+        exp_lbl  = datetime.strptime(chosen_exp, "%Y-%m-%d").strftime("%b %d '%y")
+        exp_date = datetime.strptime(chosen_exp, "%Y-%m-%d").date()
+        earn_before = [d for d in res["earnings_dates"]
+                       if date.today() < d <= exp_date]
+        if earn_before:
+            next_earn   = min(earn_before)
+            earn_days   = (next_earn - date.today()).days
+            earn_lbl    = next_earn.strftime("%b %d")
+            chain_title = f"{exp_lbl} — next earnings {earn_lbl} ({earn_days}d)"
+        else:
+            chain_title = exp_lbl
+        st.subheader(chain_title)
+        _show_chain_table(df_chain, buy_r, mode_r, rcc, res["min_oi"])
+
+    st.subheader("Top candidates — all chains")
     _show_scan_results(df_filt, mode_r, buy_r, rcc,
                        res["min_oi"], res["top_n"])
 
@@ -588,6 +739,41 @@ def _tab_single() -> None:
         mime="text/html",
         key="s_download",
     )
+
+    with st.expander("Column & color key"):
+        st.markdown("""
+**Columns**
+
+| Column | Meaning |
+|--------|---------|
+| Strike | Option strike price. |
+| Expiration | Expiration date. `2E` suffix = 2 earnings events occur before expiry. |
+| DTE | Days to expiration. |
+| Bid / Ask | Market bid and ask prices. |
+| Mid | Midpoint of bid and ask — the price you'd typically target. |
+| IV% | Implied volatility, annualized. |
+| IV+pp | How many percentage points the option's IV sits *above* the fitted volatility surface for its expiration. Positive = richer premium than peers at similar strike/DTE. |
+| Delta | Black-Scholes delta. For calls: probability of expiring in the money (0–1). For puts: same magnitude, negative sign (−1–0). |
+| Ann% | Annualized yield on capital at risk — calls vs. spot price, puts vs. strike. |
+| OI | Open interest — total outstanding contracts. Higher = more liquid. |
+| Vol | Volume — contracts traded today. |
+| NetCr | Roll mode only: net credit received if you close the existing position and open this one. |
+
+**Row shading (chain view)**
+
+| Color | Meaning |
+|-------|---------|
+| Green | IV+pp is meaningfully above average — premium is rich relative to this chain. |
+| Red | IV+pp is below average — premium is thin or cheap relative to this chain. |
+| Gray | IV+pp is near average or within the ~3 pp noise floor — no strong signal. |
+
+**Cell highlighting**
+
+| Color | Column | Meaning |
+|-------|--------|---------|
+| Red cell | Bid / Ask | Spread exceeds 1.5× the median spread for this table — wider than typical, execution may cost more than expected. |
+| Red cell | OI | Open interest is below 2× the minimum OI filter — limited liquidity, harder to fill at a good price. |
+""")
 
 
 # ── Tab: Portfolio ───────────────────────────────────────────────────────────
