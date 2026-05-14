@@ -1,7 +1,7 @@
 # options-scanner
 
-Scans a LEAPS option chain (1 year+ out) to find overpriced options
-worth selling: covered calls, cash-secured puts, and roll candidates.
+Scans an option chain to find overpriced options worth selling:
+covered calls, cash-secured puts, and roll candidates.
 Ranked by how much each option's implied volatility sits above a
 fitted volatility surface — the higher the excess, the richer the
 premium relative to the rest of the chain.
@@ -287,16 +287,17 @@ is more likely to get tested.
 
 ### Caveats
 
-**LEAPS chains are thin.** GEX is most reliable on heavily traded
-near-term options (0–60 DTE) where OI is large and IVs are fresh.
-LEAPS have lower OI and wider bid/ask spreads, so treat the chart
-as directional context rather than a precise signal.
+**Long-dated chains are thin.** GEX is most reliable on heavily
+traded near-term options (0–60 DTE) where OI is large and IVs are
+fresh. LEAPS and other far-dated options have lower OI and wider
+bid/ask spreads, so treat the chart as directional context rather
+than a precise signal.
 
 **Yahoo Finance data quality.** When using Yahoo Finance, gamma is
 estimated via Black-Scholes from Yahoo's IV, which can be hours or
-days old on LEAPS strikes. GEX computed from stale IV is a rougher
-approximation. The Schwab data source provides real-time gamma
-values from Schwab's own model, which are more reliable.
+days old on LEAPS and other far-dated strikes. GEX computed from
+stale IV is a rougher approximation. The Schwab data source provides
+real-time gamma values from Schwab's own model, which are more reliable.
 
 **Dealer positioning is an assumption.** The standard GEX model
 assumes dealers are net short calls and net long puts. This is

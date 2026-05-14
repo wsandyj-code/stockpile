@@ -1,13 +1,14 @@
 # stockpile
 
-Monorepo of stock portfolio tools: position tracker, cost basis
-charts, and shared parsing/finance utilities.
+Monorepo of stock portfolio tools: options scanner, position
+tracker, cost basis charts, and shared parsing/finance utilities.
 
-> **Disclaimer** — This software is provided free of charge, as-is,
-> with no warranty of any kind. There is no guarantee of accuracy,
-> completeness, or fitness for any particular purpose. All tools rely
-> on third-party data sources (Yahoo Finance, brokerage CSV exports,
-> Google Sheets) whose availability, accuracy, and format can change
+> **Disclaimer** — This software is provided free of charge for
+> non-commercial use, as-is, with no warranty of any kind. There is
+> no guarantee of accuracy, completeness, or fitness for any particular
+> purpose. All tools rely on third-party data sources (Yahoo Finance,
+> brokerage CSV exports, Google Sheets) whose availability, accuracy,
+> and format can change
 > without notice; output quality is limited by what those sources
 > return. Nothing produced by any tool in this repository constitutes
 > financial advice. Investing and options trading involve substantial
