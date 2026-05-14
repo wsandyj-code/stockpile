@@ -243,6 +243,66 @@ For puts, `Ann%` is calculated as premium divided by the **strike
 price** (the capital you'd need to buy 100 shares if assigned),
 annualized. This gives the true return on capital at risk.
 
+## Gamma Exposure (GEX)
+
+The web UI single-ticker tab shows a **GEX bar chart** below the
+volatility surface chart. It is not available in the CLI.
+
+### What it is
+
+GEX measures the aggregate gamma that market makers (dealers) hold
+across every strike in the chain. Because dealers typically sell
+options to retail buyers, they end up short gamma. To stay delta-
+neutral they must hedge:
+
+- **Short gamma (negative GEX):** dealers buy stock as price rises
+  and sell as it falls — amplifying moves in both directions.
+- **Long gamma (positive GEX):** dealers sell into rallies and buy
+  dips — dampening moves and pinning price near high-OI strikes.
+
+### How to read the chart
+
+The chart shows net GEX per strike as green (positive / pinning) or
+red (negative / amplifying) bars. The dashed vertical line is the
+current spot price.
+
+Three summary metrics appear above the chart:
+
+| Metric | What it means |
+|--------|--------------|
+| **Total GEX** | Sum across all strikes. Positive = pinning regime; negative = amplifying regime. |
+| **Regime** | Plain-English label for the current total GEX sign. |
+| **Zero-gamma level** | The strike where cumulative dealer gamma flips from positive to negative. Price above this level tends to behave more volatilely. |
+
+### What it tells a covered call seller
+
+A large **green wall above your strike** means dealers are long gamma
+there — their hedging activity tends to cap the stock near that
+level. That is tailwind for a covered call: the stock is less likely
+to blow through your strike.
+
+A **red zone above your strike** means the opposite — if the stock
+enters that range, dealer hedging amplifies the move and your call
+is more likely to get tested.
+
+### Caveats
+
+**LEAPS chains are thin.** GEX is most reliable on heavily traded
+near-term options (0–60 DTE) where OI is large and IVs are fresh.
+LEAPS have lower OI and wider bid/ask spreads, so treat the chart
+as directional context rather than a precise signal.
+
+**Yahoo Finance data quality.** When using Yahoo Finance, gamma is
+estimated via Black-Scholes from Yahoo's IV, which can be hours or
+days old on LEAPS strikes. GEX computed from stale IV is a rougher
+approximation. The Schwab data source provides real-time gamma
+values from Schwab's own model, which are more reliable.
+
+**Dealer positioning is an assumption.** The standard GEX model
+assumes dealers are net short calls and net long puts. This is
+generally true in aggregate but not always correct for every strike
+or every ticker.
+
 ## Roll mode example
 
 ```bash
@@ -354,11 +414,9 @@ data.
 
 Planned improvements, roughly in priority order:
 
-- **GEX (Gamma Exposure)** — aggregate dealer gamma by strike,
-  showing where market-maker hedging creates price walls or
-  amplification zones. Inputs (gamma, OI, spot) are already
-  available from the option chain; the main open question is
-  where it fits best in the UI.
+- **GEX (Gamma Exposure)** — implemented in the web UI single-ticker
+  tab. See the [Gamma Exposure section](#gamma-exposure-gex) above
+  for full documentation.
 
 ## Disclaimer
 

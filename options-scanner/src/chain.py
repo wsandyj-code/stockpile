@@ -33,6 +33,10 @@ def _norm_cdf(x: float) -> float:
     return 0.5 * math.erfc(-x / math.sqrt(2))
 
 
+def _norm_pdf(x: float) -> float:
+    return math.exp(-0.5 * x * x) / math.sqrt(2 * math.pi)
+
+
 def _bs_delta(S: float, K: float, T: float, r: float,
               sigma: float, opt_type: str) -> float:
     if T <= 0 or sigma < 0.001:
@@ -41,6 +45,13 @@ def _bs_delta(S: float, K: float, T: float, r: float,
         return -1.0 if S < K else 0.0
     d1 = (math.log(S / K) + (r + 0.5 * sigma ** 2) * T) / (sigma * math.sqrt(T))
     return _norm_cdf(d1) if opt_type == "call" else _norm_cdf(d1) - 1.0
+
+
+def _bs_gamma(S: float, K: float, T: float, r: float, sigma: float) -> float:
+    if T <= 0 or sigma < 0.001 or S <= 0:
+        return 0.0
+    d1 = (math.log(S / K) + (r + 0.5 * sigma ** 2) * T) / (sigma * math.sqrt(T))
+    return _norm_pdf(d1) / (S * sigma * math.sqrt(T))
 
 
 def _fetch_chain_yahoo(ticker: str, opt_type: str = "both",
@@ -104,6 +115,7 @@ def _fetch_chain_yahoo(ticker: str, opt_type: str = "both",
 
                 log_m = math.log(K / spot)
                 delta = _bs_delta(spot, K, T, _RISK_FREE_RATE, iv, side)
+                gamma = _bs_gamma(spot, K, T, _RISK_FREE_RATE, iv)
                 capital = spot if side == "call" else K
                 ann_yield = (mid / capital) * (365.0 / dte) * 100.0
 
@@ -121,6 +133,7 @@ def _fetch_chain_yahoo(ticker: str, opt_type: str = "both",
                     "iv_fitted":     iv,
                     "iv_excess":     0.0,
                     "delta":         delta,
+                    "gamma":         gamma,
                     "ann_yield_pct": ann_yield,
                     "open_interest": oi,
                     "volume":        volume,

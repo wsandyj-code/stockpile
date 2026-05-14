@@ -636,6 +636,97 @@ def _show_chain_table(df_exp: pd.DataFrame, buy: bool, mode: str,
                  width="stretch")
 
 
+def _show_gex_chart(df: pd.DataFrame, spot: float,
+                    provider: str = "yahoo") -> None:
+    """Gamma Exposure (GEX) bar chart by strike, aggregated across all
+    expirations.  Positive bars = dealers net long gamma (pinning);
+    negative bars = dealers net short gamma (amplifying)."""
+    if df.empty or "gamma" not in df.columns:
+        return
+
+    spot_sq = spot * spot
+
+    calls = df[df["type"] == "call"].copy()
+    puts  = df[df["type"] == "put"].copy()
+
+    calls["gex"] =  calls["gamma"] * calls["open_interest"] * 100 * spot_sq
+    puts["gex"]  = -puts["gamma"]  * puts["open_interest"]  * 100 * spot_sq
+
+    gex = (
+        pd.concat([calls[["strike", "gex"]], puts[["strike", "gex"]]])
+        .groupby("strike", as_index=False)["gex"]
+        .sum()
+        .sort_values("strike")
+    )
+
+    if gex.empty or gex["gex"].abs().sum() == 0:
+        return
+
+    total_gex  = gex["gex"].sum()
+    gex["color"] = gex["gex"].apply(lambda v: "Pinning" if v >= 0 else "Amplifying")
+
+    # Zero-gamma level: strike where cumulative GEX crosses zero
+    gex_sorted   = gex.sort_values("strike")
+    cumulative   = gex_sorted["gex"].cumsum()
+    zero_cross   = gex_sorted["strike"][cumulative >= 0].min()
+
+    st.markdown(
+        "<h5 style='margin:0 0 5px 0'>Gamma Exposure (GEX) by strike</h5>",
+        unsafe_allow_html=True,
+    )
+
+    g1, g2, g3 = st.columns(3)
+    regime = "Pinning (mean-reverting)" if total_gex >= 0 else "Amplifying (trending)"
+    g1.metric("Total GEX", f"{total_gex:,.0f}", help=(
+        "Positive = dealers net long gamma across this chain — price "
+        "tends to mean-revert. Negative = dealers net short gamma — "
+        "moves tend to be amplified."
+    ))
+    g2.metric("Regime", regime)
+    if not pd.isna(zero_cross):
+        g3.metric("Zero-gamma level", f"${zero_cross:,.2f}", help=(
+            "Strike where cumulative dealer gamma flips sign. "
+            "Price above this level tends to be more volatile."
+        ))
+
+    x_min = min(float(gex["strike"].min()), spot) * 0.97
+    x_max = max(float(gex["strike"].max()), spot) * 1.03
+
+    bars = alt.Chart(gex).mark_bar(opacity=0.85).encode(
+        x=alt.X("strike:Q", title="Strike",
+                scale=alt.Scale(domain=[x_min, x_max]),
+                axis=alt.Axis(format="$,.0f")),
+        y=alt.Y("gex:Q", title="Net GEX ($)"),
+        color=alt.Color("color:N",
+                        scale=alt.Scale(
+                            domain=["Pinning", "Amplifying"],
+                            range=["#22c55e", "#ef4444"],
+                        ),
+                        legend=alt.Legend(title=None)),
+        tooltip=[
+            alt.Tooltip("strike:Q",  title="Strike",  format="$,.0f"),
+            alt.Tooltip("gex:Q",     title="Net GEX", format=",.0f"),
+            alt.Tooltip("color:N",   title="Effect"),
+        ],
+    )
+
+    spot_rule = alt.Chart(pd.DataFrame({"spot": [spot]})).mark_rule(
+        color="#94a3b8", strokeDash=[4, 4], strokeWidth=1.5
+    ).encode(x="spot:Q")
+
+    st.altair_chart(
+        (bars + spot_rule).properties(height=240).configure_view(strokeWidth=0),
+        use_container_width=True,
+    )
+
+    caveat = (
+        "GEX estimated from Black-Scholes gamma (Yahoo IV may be stale on LEAPS)."
+        if provider == "yahoo"
+        else "GEX computed from Schwab's native gamma values."
+    )
+    st.caption(caveat)
+
+
 def _show_scan_results(df: pd.DataFrame, mode: str, buy: bool,
                        roll_close_cost: float | None,
                        min_oi: int, top_n: int) -> None:
@@ -857,6 +948,9 @@ def _tab_single() -> None:
 
     _show_iv_chart(df_filt, spot, mode_r, res["min_oi"], res["top_n"],
                    buy_r, ticker=ticker_r, key_prefix="s")
+
+    _show_gex_chart(df_r, spot,
+                    provider=st.session_state.get("data_source", "yahoo"))
 
     chosen_exp = st.session_state.get("s_chart_exp")
     if chosen_exp:

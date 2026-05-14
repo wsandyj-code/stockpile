@@ -87,6 +87,7 @@ def fetch_chain_schwab(ticker: str, opt_type: str = "both",
                     # Schwab returns IV as a percentage (e.g., 45.5 = 45.5%)
                     iv = _safe_float(opt.get("volatility")) / 100.0
                     delta = _safe_float(opt.get("delta"))
+                    gamma = _safe_float(opt.get("gamma"))
                     oi = _safe_int(opt.get("openInterest"))
                     volume = _safe_int(opt.get("totalVolume"))
                     dte = _safe_int(opt.get("daysToExpiration"))
@@ -120,6 +121,7 @@ def fetch_chain_schwab(ticker: str, opt_type: str = "both",
                         "iv_fitted":     iv,
                         "iv_excess":     0.0,
                         "delta":         delta,
+                        "gamma":         gamma,
                         "ann_yield_pct": ann_yield,
                         "open_interest": oi,
                         "volume":        volume,
