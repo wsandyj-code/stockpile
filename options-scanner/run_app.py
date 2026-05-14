@@ -366,13 +366,14 @@ def _show_iv_chart(df: pd.DataFrame, spot: float, mode: str,
     chart_df["FittedIV%"]  = (chart_df["iv_fitted"] * 100).round(2)
     chart_df["IV+pp"]      = (chart_df["iv_excess"] * 100).round(2)
     chart_df["Ann%"]       = chart_df["ann_yield_pct"].round(2)
-    chart_df["ExpLabel"]   = chart_df["expiration"].apply(
-        lambda d: datetime.strptime(d, "%Y-%m-%d").strftime("%b %d '%y")
+    exp_dte = chart_df.groupby("expiration")["dte"].first().to_dict()
+    chart_df["ExpLabel"] = chart_df["expiration"].apply(
+        lambda d: f"{datetime.strptime(d, '%Y-%m-%d').strftime('%b %d \'%y')} ({exp_dte.get(d, 0)}d)"
     )
 
     expirations = sorted(chart_df["expiration"].unique())
     exp_labels  = {
-        e: datetime.strptime(e, "%Y-%m-%d").strftime("%b %d '%y")
+        e: f"{datetime.strptime(e, '%Y-%m-%d').strftime('%b %d \'%y')} — {exp_dte.get(e, 0)}d"
         for e in expirations
     }
     pick_counts = {
@@ -448,7 +449,6 @@ def _show_iv_chart(df: pd.DataFrame, spot: float, mode: str,
 
     tooltip_fields = [
         alt.Tooltip("strike:Q",        title="Strike", format="$,.0f"),
-        alt.Tooltip("ExpLabel:N",      title="Expiration"),
         alt.Tooltip("type:N",          title="Type"),
         alt.Tooltip("IV%:Q",           format=".1f"),
         alt.Tooltip("FittedIV%:Q",     title="Fitted IV%", format=".1f"),
@@ -941,7 +941,12 @@ def _tab_single() -> None:
     m1.metric("Spot", f"${spot:.2f}")
     m2.metric("Expirations", df_r["expiration"].nunique())
     ed = res["earnings_dates"]
-    m3.metric("Next Earnings", ed[0].strftime("%b %d") if ed else "unknown")
+    if ed:
+        earn_days = (ed[0] - date.today()).days
+        earn_label = f"{ed[0].strftime('%b %d')} ({earn_days}d)"
+    else:
+        earn_label = "unknown"
+    m3.metric("Next Earnings", earn_label)
     st.divider()
 
     if rcc is not None:
@@ -1201,11 +1206,15 @@ def _tab_portfolio() -> None:
                            "throttling. Try again in a moment.")
                 continue
 
-            m1, m2 = st.columns(2)
+            m1, m2, m3 = st.columns(3)
             m1.metric("Spot", f"${spot:.2f}")
-            m2.metric("Next Earnings",
-                      earnings_dates[0].strftime("%b %d")
-                      if earnings_dates else "unknown")
+            m2.metric("Expirations", df["expiration"].nunique())
+            if earnings_dates:
+                earn_days = (earnings_dates[0] - date.today()).days
+                earn_label = f"{earnings_dates[0].strftime('%b %d')} ({earn_days}d)"
+            else:
+                earn_label = "unknown"
+            m3.metric("Next Earnings", earn_label)
 
             for opt in pos["open_calls"]:
                 close = res["roll_close_costs"].get(opt["symbol"])

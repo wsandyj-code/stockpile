@@ -418,6 +418,46 @@ Planned improvements, roughly in priority order:
   tab. See the [Gamma Exposure section](#gamma-exposure-gex) above
   for full documentation.
 
+- **IV Rank / IV Percentile (IVR/IVP)** — show how current IV compares
+  to its 52-week range. High IVR means premiums are rich relative to
+  recent history — the most important context for deciding whether to
+  sell options on a given ticker.
+
+- **Expected move** — derive the market-implied move for each
+  expiration from the at-the-money straddle price. Useful when picking
+  a strike: the expected move is the range the market thinks the stock
+  will stay within by expiration.
+
+- **Theta** — add time decay (per day) to the output alongside delta
+  and the other Greeks. Options sellers care about how much premium
+  they collect each day the position is held.
+
+- **Tradier data source** — the free developer sandbox lets you test
+  without a funded account; REST/JSON responses map cleanly onto the
+  existing chain fetcher. Easiest next broker integration to add.
+
+- **Interactive Brokers CSV support** — several users have requested
+  this. Waiting on an example export file to spec the parser.
+
+- **GEX on portfolio tab** — extend the GEX chart to each position
+  in the portfolio scan, not just the single-ticker tab.
+
+- **IV term structure chart** — plot IV by expiration (rather than by
+  strike) to show whether near-term or far-dated vol is elevated.
+  Helps identify which expiration has the richest premium environment.
+
+- **Skew chart** — plot IV by strike for a single expiration to
+  visualize the put/call skew. Shows how the market is pricing
+  downside vs. upside risk at a glance.
+
+- **Watchlist** — save a list of tickers to scan without uploading a
+  brokerage CSV each time. Useful for monitoring a fixed set of
+  stocks on a regular basis.
+
+- **Portfolio-level Greeks summary** — aggregate delta, theta, and
+  vega across all open positions so you can see total book exposure
+  at a glance.
+
 ## Disclaimer
 
 This software is provided free of charge, as-is, with no warranty
