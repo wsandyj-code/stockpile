@@ -6,11 +6,13 @@ to surface IV-rich candidates for covered calls, cash-secured puts,
 and roll setups — or, in buy mode, IV-cheap candidates.
 
 The ranking is a **screening heuristic, not a mispricing or
-arbitrage claim**: vol smiles and skew are real, no-arbitrage
-doesn't force the surface to be smooth, and a strike sitting above
-the fit can reflect demand pressure, event-specific risk, or stale
-data just as easily as a genuine signal. Treat the output as a
-starting point for further analysis on your broker.
+arbitrage claim**: vol smiles and skew are real, and a strike
+sitting above the fit can reflect demand pressure, event-specific
+risk, or stale data as easily as a genuine signal. Treat the
+output as a starting point for further analysis on your broker.
+See [INTERPRETING_IV.md](INTERPRETING_IV.md) for what IV+pp
+actually means mechanically, why an outlier is not the same as
+edge, and how to read the magnitudes in practice.
 
 Three entry points:
 
@@ -243,18 +245,16 @@ $520    Jun 17 '27      408  $50.45  $54.45  $52.45  65.3   +1.0   0.45  13.2   
 
 ### Is there a genuine IV outlier?
 
-Look at the `IV+pp` column first. If the top value is under ~3pp, the
-chain's IV is roughly uniform and the ranking is mostly noise — no
-strike stands out from the surface. In the AMD example above, the
-max is +1.6pp, which is small. All these options sit close to the
-fitted surface; AMD's volatility surface is smooth right now.
+Look at the `IV+pp` column first. If the top value is under ~3pp,
+the chain's IV is roughly uniform and the ranking is mostly noise.
+In the AMD example above, the max is +1.6pp — all these options
+sit close to the fitted surface. When you see IV+pp of 5pp or more
+on a specific strike, that's a stronger ranking signal worth a
+closer look on your broker.
 
-When you see IV+pp of 5pp or more on a specific strike, that option's
-IV is meaningfully higher than its neighbors — a stronger ranking
-signal worth investigating. That doesn't mean it's mispriced in any
-tradeable sense (it could reflect demand pressure, skew, event risk,
-or a stale print); it means it's the kind of strike worth a closer
-look on your broker.
+See [INTERPRETING_IV.md](INTERPRETING_IV.md) for what those numbers
+mean mechanically and why an outlier isn't the same as a
+mispricing.
 
 ### Picking a strike
 
@@ -277,11 +277,10 @@ premium against assignment risk. Use `--delta-min 0.25 --delta-max
 
 ### Earnings tag
 
-`1E` next to an expiration means one earnings event falls before that
-date. Elevated IV near earnings is expected and is not a free lunch —
-the market is pricing in the uncertainty of the announcement. Selling
-into earnings IV is a strategy in itself, but goes beyond what this
-IV-vs-surface screen surfaces.
+`1E` next to an expiration means one earnings event falls before
+that date. Elevated IV near earnings is expected and is not a free
+lunch — see [INTERPRETING_IV.md](INTERPRETING_IV.md#earnings-and-iv)
+for why.
 
 ### LT capital gains
 

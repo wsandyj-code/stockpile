@@ -1,0 +1,115 @@
+# Interpreting IV+pp
+
+This tool ranks options by **IV excess** — the gap between an
+option's implied volatility and a fitted volatility surface. The
+`IV+pp` column shows that gap in percentage points: `+5.2` means
+the option's IV is 5.2 pp above where the smooth surface predicts
+it should sit for that strike and expiration.
+
+This doc explains what that signal actually represents, what it
+doesn't, and how to use it without overinterpreting it.
+
+## Does higher IV mean better premium?
+
+Mechanically: yes, with certainty. Implied volatility is back-solved
+from the market price under Black-Scholes — it's the σ that makes
+the model output match the observed quote. Vega (∂Premium/∂σ) is
+strictly positive for both calls and puts, so an option trading at
+higher IV than its neighbors is — by definition — trading at a
+higher price than the model-fair value implied by those neighbors.
+The premium collected per contract is unambiguously larger.
+
+So if your only question is "will I collect more dollars selling
+this strike versus a nearby strike with the same delta?", the
+answer when IV+pp is positive is yes.
+
+## Is that better premium *favorable*?
+
+That's a separate question, and the answer is "it depends."
+
+You're being paid more because the market expects (or fears) more
+realized volatility on that strike than the fitted surface
+suggests. The edge — if there is one — only exists when the fitted
+surface is closer to the true future distribution than the market's
+pricing is. Three scenarios:
+
+- **The elevated IV is noise.** A stale print, thin liquidity, or a
+  one-off demand imbalance pushed the IV above neighbors with no
+  underlying information. Selling here captures real edge: you
+  collect rich premium against a position whose actual risk matches
+  the smoother surface.
+
+- **The elevated IV reflects information you don't have.**
+  Earnings, pending litigation, an FDA decision, a takeover rumor,
+  dealer positioning the surface doesn't capture. Selling here
+  looks rich in IV space but you're being paid fairly (or being
+  underpaid) for a real risk the market is pricing in. The premium
+  is bigger but so is the conditional payoff against you.
+
+- **The elevated IV is structural skew.** Out-of-the-money puts
+  routinely trade above the surface because there's persistent
+  demand for downside hedges. A 2-D polynomial surface doesn't
+  fully model that. The IV+pp is real but not edge — it's an
+  artifact of fitting a smooth function to a non-smooth phenomenon.
+
+The scanner's ranking implicitly assumes outliers are noise. That
+assumption is where the uncertainty lives — not in the price↔IV
+mechanics.
+
+## Reading IV+pp magnitudes
+
+A rough heuristic for what the magnitudes mean in practice:
+
+- **Under ~3pp** — the chain's IV is roughly uniform; ranking is
+  mostly noise. No strike stands out from the surface. This is the
+  common case for liquid, low-event tickers.
+- **3–5pp** — moderate elevation. Worth a glance, especially if it
+  clusters at a specific strike or expiration.
+- **5pp+** — meaningfully above neighbors. The kind of strike
+  worth investigating on your broker. Still not a mispricing claim
+  — see the three scenarios above — but a stronger ranking signal.
+
+## What this is not
+
+- **Not a mispricing claim.** Vol smiles and skew are real. The
+  no-arbitrage principle does not require the surface to be smooth.
+- **Not arbitrage.** Even an IV genuinely above the true surface is
+  not a riskless trade — you take on the option's underlying
+  exposure when you sell it.
+- **Not a recommendation.** Treat every outlier as a starting point
+  for further analysis on your broker, not a trade signal.
+
+## Earnings and IV
+
+`1E` next to an expiration means one earnings event falls before
+that date. Elevated IV near earnings is expected and is not a free
+lunch — the market is pricing in the uncertainty of the
+announcement. Selling into earnings IV is a strategy in itself
+(short straddle / iron condor / etc.), but it goes beyond what
+this IV-vs-surface screen surfaces. An IV+pp spike right before
+earnings is information you already had.
+
+## The fitted surface
+
+The surface is a 2-D fit: IV ≈ f(log-moneyness, √T). It assumes IV
+varies smoothly across strikes (the smile) and across time (term
+structure). It does not model:
+
+- Asymmetric skew beyond what the polynomial captures
+- Strike-specific events (e.g. a special dividend ex-date inside
+  one expiration)
+- Dealer positioning concentrating at specific strikes
+- Quote staleness on illiquid strikes
+
+When you see an outlier, asking "could any of the above explain
+it?" is usually a faster gut check than placing a trade.
+
+## Buy mode (the inverse)
+
+`--buy` flips the ranking: lowest IV+pp first. The same mechanics
+apply in reverse. An option trading meaningfully below the surface
+is priced under model-fair value relative to its neighbors. Whether
+that's edge for the buyer depends on the same three scenarios — is
+the low IV noise (stale, thin), information (the market knows
+something benign is coming), or structural (a strike where supply
+exceeds demand)?
