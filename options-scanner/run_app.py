@@ -256,6 +256,40 @@ def _low_oi_mask(oi: pd.Series, min_oi: int) -> list[bool]:
     return [v < thresh for v in oi.tolist()]
 
 
+def _low_vol_mask(vol: pd.Series, min_vol: int) -> list[bool]:
+    thresh = max(min_vol * 2, 4)
+    return [v < thresh for v in vol.tolist()]
+
+
+def _compute_top_ranks(df: pd.DataFrame, mode: str, buy: bool,
+                       min_oi: int, top_n: int,
+                       min_vol: int = 0,
+                       ) -> dict[tuple[str, float, str], int]:
+    """Return {(type, strike, expiration): rank} for top-N candidates,
+    where rank is 1-indexed per option type. Same ranking logic the
+    bottom table and the chart picks use, factored out so the chart
+    and chain table can label each pick with its position.
+    """
+    if df.empty:
+        return {}
+    iv_asc = buy
+    pick_types = ["call", "put"] if mode == "both" else [mode]
+    ranks: dict[tuple[str, float, str], int] = {}
+    for t in pick_types:
+        ranked = (
+            df[(df["type"] == t)
+               & (df["open_interest"] >= min_oi)
+               & (df["volume"] >= min_vol)]
+            .sort_values(["iv_excess", "open_interest"],
+                         ascending=[iv_asc, False])
+            .head(top_n)
+            .reset_index(drop=True)
+        )
+        for i, r in ranked.iterrows():
+            ranks[(r["type"], float(r["strike"]), r["expiration"])] = i + 1
+    return ranks
+
+
 _CELL_WARN = "background-color: rgba(234,179,8,0.45)"
 _BID_HELP  = ("Yellow: spread is wider than 1.5× the median for this table"
               " — higher execution cost.")
@@ -326,7 +360,7 @@ def _stamp_caption() -> None:
 
 
 def _show_df(sub: pd.DataFrame, roll_close_cost: float | None = None,
-             min_oi: int = 0) -> None:
+             min_oi: int = 0, min_vol: int = 0) -> None:
     if sub.empty:
         st.info("No options match the current filters.")
         return
@@ -352,7 +386,7 @@ def _show_df(sub: pd.DataFrame, roll_close_cost: float | None = None,
 
     wide   = _wide_spread_mask(sub["bid"], sub["ask"], sub["mid"])
     lo     = _low_oi_mask(sub["open_interest"], min_oi)
-    low_vol = [v < 4 for v in sub["volume"].tolist()]
+    low_vol = _low_vol_mask(sub["volume"], min_vol)
 
     styled = (
         disp.style
@@ -365,30 +399,32 @@ def _show_df(sub: pd.DataFrame, roll_close_cost: float | None = None,
     )
 
     col_cfg = {
-        "DTE":   st.column_config.NumberColumn("DTE",   format="%d",
-                                               width="small"),
-        "Bid":   st.column_config.NumberColumn("Bid",   format="$%.2f",
-                                               help=_BID_HELP),
-        "Ask":   st.column_config.NumberColumn("Ask",   format="$%.2f",
-                                               help=_BID_HELP),
-        "Mid":   st.column_config.NumberColumn("Mid",   format="$%.2f"),
-        "IV%":   st.column_config.NumberColumn("IV%",   format="%.1f%%",
-                                               width="small"),
+        "Strike":     st.column_config.TextColumn("Strike", width=75),
+        "Expiration": st.column_config.TextColumn("Expiration", width=105),
+        "DTE":   st.column_config.NumberColumn("DTE", format="%d", width=55),
+        "Bid":   st.column_config.NumberColumn("Bid", format="$%.2f",
+                                               width=70, help=_BID_HELP),
+        "Ask":   st.column_config.NumberColumn("Ask", format="$%.2f",
+                                               width=70, help=_BID_HELP),
+        "Mid":   st.column_config.NumberColumn("Mid", format="$%.2f",
+                                               width=70),
+        "IV%":   st.column_config.NumberColumn("IV%", format="%.1f%%",
+                                               width=70),
         "IV+pp": st.column_config.NumberColumn("IV+pp", format="%+.1f pp",
-                                               width="small", help=_IVPP_HELP),
+                                               width=75, help=_IVPP_HELP),
         "Delta": st.column_config.NumberColumn("Delta", format="%.2f",
-                                               width="small"),
-        "Ann%":  st.column_config.NumberColumn("Ann%",  format="%.1f%%",
-                                               width="small"),
-        "OI":    st.column_config.NumberColumn("OI",    format="%d",
-                                               width="small", help=_OI_HELP),
-        "Vol":   st.column_config.NumberColumn("Vol",   format="%d",
-                                               width="small", help=_VOL_HELP),
+                                               width=60),
+        "Ann%":  st.column_config.NumberColumn("Ann%", format="%.1f%%",
+                                               width=65),
+        "OI":    st.column_config.NumberColumn("OI", format="%d",
+                                               width=65, help=_OI_HELP),
+        "Vol":   st.column_config.NumberColumn("Vol", format="%d",
+                                               width=65, help=_VOL_HELP),
     }
     if roll_close_cost is not None:
         col_cfg["NetCr"] = st.column_config.NumberColumn("Net Credit",
                                                          format="$%+.2f",
-                                                         width="small")
+                                                         width=85)
 
     st.dataframe(styled, column_config=col_cfg, hide_index=True,
                  width="stretch")
@@ -397,7 +433,8 @@ def _show_df(sub: pd.DataFrame, roll_close_cost: float | None = None,
 
 def _show_iv_chart(df: pd.DataFrame, spot: float, mode: str,
                    min_oi: int, top_n: int, buy: bool,
-                   ticker: str = "", key_prefix: str = "s") -> None:
+                   ticker: str = "", key_prefix: str = "s",
+                   min_vol: int = 0) -> None:
     """Layered chart: per-expiration smile with the table's top-N picks
     highlighted. Faded background dots are the rest of the chain at the
     selected expiration; bright outlined dots are the picks."""
@@ -410,22 +447,17 @@ def _show_iv_chart(df: pd.DataFrame, spot: float, mode: str,
     if chart_df.empty:
         return
 
-    iv_asc = buy
-    pick_types = ["call", "put"] if mode == "both" else [mode]
-    top_keys: set[tuple[str, float, str]] = set()
-    for t in pick_types:
-        ranked = (
-            chart_df[(chart_df["type"] == t)
-                     & (chart_df["open_interest"] >= min_oi)]
-            .sort_values(["iv_excess", "open_interest"],
-                         ascending=[iv_asc, False])
-            .head(top_n)
-        )
-        for _, r in ranked.iterrows():
-            top_keys.add((r["type"], float(r["strike"]), r["expiration"]))
-
+    top_ranks = _compute_top_ranks(
+        chart_df, mode, buy, min_oi, top_n, min_vol,
+    )
     chart_df["is_top"] = chart_df.apply(
-        lambda r: (r["type"], float(r["strike"]), r["expiration"]) in top_keys,
+        lambda r: (r["type"], float(r["strike"]), r["expiration"]) in top_ranks,
+        axis=1,
+    )
+    chart_df["rank_label"] = chart_df.apply(
+        lambda r: str(top_ranks.get(
+            (r["type"], float(r["strike"]), r["expiration"]), ""
+        )),
         axis=1,
     )
     chart_df["IV%"]        = (chart_df["iv"] * 100).round(2)
@@ -558,6 +590,19 @@ def _show_iv_chart(df: pd.DataFrame, spot: float, mode: str,
         tooltip=tooltip_fields,
     )
 
+    # Rank badge above each pick — shows where this option sits in
+    # the top-N list per type (1 = strongest signal). Same ordering
+    # as the bottom table, so the user can match chart picks to table
+    # rows at a glance.
+    ranks = alt.Chart(sub[sub["is_top"]]).mark_text(
+        fontSize=14, dy=-20, fontWeight="bold",
+        color="#0f172a",
+    ).encode(
+        x=base_x,
+        y="IV%:Q",
+        text="rank_label:N",
+    )
+
     spot_df = pd.DataFrame({"x": [spot], "y": [y_max],
                             "label": [f"Spot ${spot:.2f}"]})
     spot_rule = alt.Chart(spot_df).mark_rule(
@@ -579,7 +624,7 @@ def _show_iv_chart(df: pd.DataFrame, spot: float, mode: str,
     title_text = (f"{ticker} {type_word} — {exp_labels[chosen_exp]}"
                   if ticker else f"{type_word} — {exp_labels[chosen_exp]}")
     chart = (
-        fitted_line + background + picks + spot_rule + spot_label
+        fitted_line + background + picks + ranks + spot_rule + spot_label
     ).properties(
         height=380,
         title=alt.TitleParams(
@@ -594,17 +639,22 @@ def _show_iv_chart(df: pd.DataFrame, spot: float, mode: str,
     st.altair_chart(chart, use_container_width=True)
     st.caption(
         "Dashed gray line is the fitted volatility surface for this "
-        "expiration. **Larger outlined dots are the top picks shown in "
-        "the table — across all expirations.** Faded dots are the rest "
-        "of the chain at this expiration for context. Green = attractive "
-        "premium (rich to sell / cheap to buy), red = unattractive. "
-        "Vertical dashed line marks the current spot price."
+        "expiration. **Larger outlined dots with a number above them "
+        "are the top picks — the number is the rank in the table "
+        "below (1 = strongest signal, ranked per type).** Faded dots "
+        "are the rest of the chain at this expiration for context. "
+        "Green = attractive premium (rich to sell / cheap to buy), "
+        "red = unattractive. Vertical dashed line marks the current "
+        "spot price."
     )
 
 
 def _show_chain_table(df_exp: pd.DataFrame, buy: bool, mode: str,
                       roll_close_cost: float | None = None,
-                      min_oi: int = 0) -> None:
+                      min_oi: int = 0, min_vol: int = 0,
+                      top_ranks: dict[tuple[str, float, str], int]
+                                 | None = None,
+                      ) -> None:
     """All options for one expiration, sorted by strike, rows shaded by IV+pp."""
     if df_exp.empty:
         st.info("No options for this expiration after filters.")
@@ -612,7 +662,13 @@ def _show_chain_table(df_exp: pd.DataFrame, buy: bool, mode: str,
 
     df_s = df_exp.sort_values(["strike", "type"]).reset_index(drop=True)
 
-    cols: dict = {}
+    tr = top_ranks or {}
+    rank_col = [
+        str(tr.get((r["type"], float(r["strike"]), r["expiration"]), ""))
+        for _, r in df_s.iterrows()
+    ]
+
+    cols: dict = {"Top": rank_col}
     if mode == "both":
         cols["Type"] = df_s["type"].str.capitalize()
     cols.update({
@@ -666,7 +722,7 @@ def _show_chain_table(df_exp: pd.DataFrame, buy: bool, mode: str,
     # Cell-level overrides for spread, OI, and vol (applied after row bg).
     wide    = _wide_spread_mask(df_s["bid"], df_s["ask"], df_s["mid"])
     lo      = _low_oi_mask(df_s["open_interest"], min_oi)
-    low_vol = [v < 4 for v in df_s["volume"].tolist()]
+    low_vol = _low_vol_mask(df_s["volume"], min_vol)
 
     styled = (
         disp.style
@@ -680,37 +736,46 @@ def _show_chain_table(df_exp: pd.DataFrame, buy: bool, mode: str,
     )
 
     col_cfg = {
-        "DTE":   st.column_config.NumberColumn("DTE",   format="%d",
-                                               width="small"),
-        "Bid":   st.column_config.NumberColumn("Bid",   format="$%.2f",
-                                               help=_BID_HELP),
-        "Ask":   st.column_config.NumberColumn("Ask",   format="$%.2f",
-                                               help=_BID_HELP),
-        "Mid":   st.column_config.NumberColumn("Mid",   format="$%.2f"),
-        "IV%":   st.column_config.NumberColumn("IV%",   format="%.1f%%",
-                                               width="small"),
+        "Top":   st.column_config.TextColumn(
+            "Top", width=50,
+            help="Rank in the top candidates table below "
+                 "(1 = strongest signal). Ranked per option type "
+                 "after OI/Vol filters. Blank = not in top N.",
+        ),
+        "Type":  st.column_config.TextColumn("Type", width=60),
+        "Strike": st.column_config.TextColumn("Strike", width=75),
+        "DTE":   st.column_config.NumberColumn("DTE", format="%d", width=55),
+        "Bid":   st.column_config.NumberColumn("Bid", format="$%.2f",
+                                               width=70, help=_BID_HELP),
+        "Ask":   st.column_config.NumberColumn("Ask", format="$%.2f",
+                                               width=70, help=_BID_HELP),
+        "Mid":   st.column_config.NumberColumn("Mid", format="$%.2f",
+                                               width=70),
+        "IV%":   st.column_config.NumberColumn("IV%", format="%.1f%%",
+                                               width=70),
         "IV+pp": st.column_config.NumberColumn("IV+pp", format="%+.1f pp",
-                                               width="small", help=_IVPP_HELP),
+                                               width=75, help=_IVPP_HELP),
         "Delta": st.column_config.NumberColumn("Delta", format="%.2f",
-                                               width="small"),
-        "Ann%":  st.column_config.NumberColumn("Ann%",  format="%.1f%%",
-                                               width="small"),
-        "OI":    st.column_config.NumberColumn("OI",    format="%d",
-                                               width="small", help=_OI_HELP),
-        "Vol":   st.column_config.NumberColumn("Vol",   format="%d",
-                                               width="small", help=_VOL_HELP),
+                                               width=60),
+        "Ann%":  st.column_config.NumberColumn("Ann%", format="%.1f%%",
+                                               width=65),
+        "OI":    st.column_config.NumberColumn("OI", format="%d",
+                                               width=65, help=_OI_HELP),
+        "Vol":   st.column_config.NumberColumn("Vol", format="%d",
+                                               width=65, help=_VOL_HELP),
     }
     if roll_close_cost is not None:
         col_cfg["NetCr"] = st.column_config.NumberColumn("Net Credit",
                                                          format="$%+.2f",
-                                                         width="small")
+                                                         width=85)
     st.dataframe(styled, column_config=col_cfg, hide_index=True,
                  width="stretch")
     _stamp_caption()
 
 
 def _show_gex_chart(df: pd.DataFrame, spot: float,
-                    provider: str = "yahoo") -> None:
+                    provider: str = "yahoo",
+                    ticker: str = "") -> None:
     """Gamma Exposure (GEX) bar chart by strike, aggregated across all
     expirations.  Positive bars = dealers net long gamma (pinning);
     negative bars = dealers net short gamma (amplifying)."""
@@ -759,6 +824,7 @@ def _show_gex_chart(df: pd.DataFrame, spot: float,
 
     x_min = min(float(gex["strike"].min()), spot) * 0.97
     x_max = max(float(gex["strike"].max()), spot) * 1.03
+    y_max_gex = float(gex["gex"].max())
 
     bars = alt.Chart(gex).mark_bar(opacity=0.85).encode(
         x=alt.X("strike:Q", title="Strike",
@@ -778,15 +844,44 @@ def _show_gex_chart(df: pd.DataFrame, spot: float,
         ],
     )
 
-    spot_rule = alt.Chart(pd.DataFrame({"spot": [spot]})).mark_rule(
-        color="#94a3b8", strokeDash=[4, 4], strokeWidth=1.5
-    ).encode(x="spot:Q")
+    spot_df = pd.DataFrame({"x": [spot], "y": [y_max_gex],
+                            "label": [f"Spot ${spot:.2f}"]})
+    spot_rule = alt.Chart(spot_df).mark_rule(
+        color="#0f172a", strokeDash=[3, 3], strokeWidth=1.5,
+    ).encode(
+        x=alt.X("x:Q", scale=alt.Scale(domain=[x_min, x_max])),
+    )
+    spot_label = alt.Chart(spot_df).mark_text(
+        align="left", baseline="top", dx=5, dy=2,
+        color="#0f172a", fontWeight="bold", fontSize=11,
+    ).encode(
+        x=alt.X("x:Q", scale=alt.Scale(domain=[x_min, x_max])),
+        y="y:Q",
+        text="label:N",
+    )
+
+    # Build a screenshot-friendly title: ticker first, then chart type.
+    # Falls back to just the chart name if no ticker is passed.
+    title_text = (f"{ticker} — Gamma Exposure (GEX) by strike"
+                  if ticker else "Gamma Exposure (GEX) by strike")
+
+    # DTE scope footnote so screenshots taken days later still convey
+    # which slice of the chain the bars are summed over.
+    if "dte" in df.columns and not df["dte"].empty:
+        dte_lo = int(df["dte"].min())
+        dte_hi = int(df["dte"].max())
+        n_exp  = int(df["expiration"].nunique())
+        dte_note = (f"Aggregated across {n_exp} expiration"
+                    f"{'s' if n_exp != 1 else ''} "
+                    f"({dte_lo}–{dte_hi} DTE).")
+    else:
+        dte_note = "Aggregated across all expirations in the current scan."
 
     st.altair_chart(
-        (bars + spot_rule).properties(
+        (bars + spot_rule + spot_label).properties(
             height=240,
             title=alt.TitleParams(
-                text="Gamma Exposure (GEX) by strike",
+                text=title_text,
                 subtitle=_scan_stamp_text() or None,
                 subtitleColor=_scan_stamp_color(),
                 subtitleFontSize=11,
@@ -797,17 +892,18 @@ def _show_gex_chart(df: pd.DataFrame, spot: float,
         use_container_width=True,
     )
 
-    caveat = (
+    provider_caveat = (
         "GEX estimated from Black-Scholes gamma (Yahoo IV may be stale on LEAPS)."
         if provider == "yahoo"
         else "GEX computed from Schwab's native gamma values."
     )
-    st.caption(caveat)
+    st.caption(f"{dte_note} {provider_caveat}")
 
 
 def _show_scan_results(df: pd.DataFrame, mode: str, buy: bool,
                        roll_close_cost: float | None,
-                       min_oi: int, top_n: int) -> None:
+                       min_oi: int, top_n: int,
+                       min_vol: int = 0) -> None:
     iv_asc = buy
     type_labels = {"call": "Calls", "put": "Puts"}
     to_show = [mode] if mode in type_labels else list(type_labels.keys())
@@ -817,10 +913,11 @@ def _show_scan_results(df: pd.DataFrame, mode: str, buy: bool,
             df[df["type"] == opt_type]
             .sort_values(["iv_excess", "open_interest"], ascending=[iv_asc, False])
         )
-        sub = sub[sub["open_interest"] >= min_oi].head(top_n)
+        sub = sub[(sub["open_interest"] >= min_oi)
+                  & (sub["volume"] >= min_vol)].head(top_n)
         if len(to_show) > 1:
             st.subheader(type_labels[opt_type])
-        _show_df(sub, roll_close_cost, min_oi)
+        _show_df(sub, roll_close_cost, min_oi, min_vol)
 
 
 # ── Tab: Single Ticker ───────────────────────────────────────────────────────
@@ -877,7 +974,9 @@ def _tab_single() -> None:
 
     # ── Group 3: Filters ──────────────────────────────────────────────────────
     with st.container(border=True):
-        n1, n2, n3, n4 = st.columns([1, 1, 1, 6], vertical_alignment="bottom")
+        n1, n2, n3, n4, n5 = st.columns(
+            [1, 1, 1, 1, 5], vertical_alignment="bottom",
+        )
         with n1:
             min_dte = st.number_input("Min DTE", value=30, min_value=1,
                                       key="s_min_dte")
@@ -888,6 +987,11 @@ def _tab_single() -> None:
             min_oi = st.number_input("Min OI", value=25, min_value=0,
                                      key="s_min_oi")
         with n4:
+            min_vol = st.number_input(
+                "Min Vol", value=10, min_value=0,
+                key="s_min_vol",
+            )
+        with n5:
             st.markdown(
                 "<p style='text-align:left; color:#f97316; font-size:1.1rem;"
                 " font-weight:600; margin:0; padding:0 0 1rem 20px;'>"
@@ -900,12 +1004,15 @@ def _tab_single() -> None:
     # All three controls sit on one row. Layout (T=9):
     #   Delta=2   → covers Min DTE + Max DTE width above
     #   Top N=1   → aligns with Min OI (with CSS padding-left tweak)
-    #   spacer=0.15
-    #   Scan=1    → ~11% wide, left-aligned with Option Type radio
-    #               column above (Option Type starts at ~36.7% of row)
-    #   spacer=4.85
+    #   spacer=1.10
+    #   Scan=1    → left-aligned with the orange warning text column
+    #               above (which starts after Min DTE/Max DTE/Min OI/Min
+    #               Vol, i.e. at 4 col-units + 4 gaps from the row's left
+    #               edge). 1 + G/col_unit ≈ 1.10 makes Scan's left edge
+    #               match exactly (assumes ~16px gap).
+    #   spacer=3.90
     s1, s2, _, s3, _ = st.columns(
-        [2, 1, 0.15, 1, 4.85], vertical_alignment="bottom",
+        [2, 1, 1.10, 1, 3.90], vertical_alignment="bottom",
     )
     with s1:
         delta_range = st.slider("Delta Range (abs value)", 0.0, 1.0,
@@ -1013,6 +1120,7 @@ def _tab_single() -> None:
             "delta_min": delta_min,
             "delta_max": delta_max,
             "min_oi": int(min_oi),
+            "min_vol": int(min_vol),
             "top_n": int(top_n),
             "roll_exp_str": roll_exp.strftime("%Y-%m-%d") if rolling else None,
             "roll_strike": roll_strike if rolling else None,
@@ -1065,10 +1173,12 @@ def _tab_single() -> None:
             st.rerun()
 
     _show_iv_chart(df_filt, spot, mode_r, res["min_oi"], res["top_n"],
-                   buy_r, ticker=ticker_r, key_prefix="s")
+                   buy_r, ticker=ticker_r, key_prefix="s",
+                   min_vol=res.get("min_vol", 0))
 
     _show_gex_chart(df_r, spot,
-                    provider=st.session_state.get("scan_provider", "yahoo"))
+                    provider=st.session_state.get("scan_provider", "yahoo"),
+                    ticker=ticker_r)
 
     chosen_exp = st.session_state.get("s_chart_exp")
     if chosen_exp:
@@ -1085,15 +1195,21 @@ def _tab_single() -> None:
         else:
             chain_title = exp_lbl
         st.subheader(chain_title)
-        _show_chain_table(df_chain, buy_r, mode_r, rcc, res["min_oi"])
+        top_ranks = _compute_top_ranks(
+            df_filt, mode_r, buy_r, res["min_oi"], res["top_n"],
+            res.get("min_vol", 0),
+        )
+        _show_chain_table(df_chain, buy_r, mode_r, rcc, res["min_oi"],
+                          res.get("min_vol", 0), top_ranks=top_ranks)
 
     st.subheader("Top candidates — all chains")
     _show_scan_results(df_filt, mode_r, buy_r, rcc,
-                       res["min_oi"], res["top_n"])
+                       res["min_oi"], res["top_n"],
+                       res.get("min_vol", 0))
 
     from report import render_html
     html = render_html(df_filt, ticker_r, spot, ed, mode_r, buy_r, rcc,
-                       res["min_oi"])
+                       res["min_oi"], res.get("min_vol", 0))
     action_tag = "buy" if buy_r else "sell"
     type_tag   = mode_r if mode_r != "both" else "both"
     st.download_button(
@@ -1937,19 +2053,22 @@ st.markdown(
     }
 
     /* Nudge the Top N input right so it lines up vertically with Min OI
-       in the row above. The combined slider/Top N/Scan row has 5
-       columns (4 gaps) vs. the filter row's 4 columns (3 gaps), so the
-       natural offset is roughly 1 column-gap. Tuned to ~1.15rem; bump
-       up if Top N drifts left of Min OI, bump down if it overshoots. */
+       in the row above. Both rows now have 5 columns / 4 gaps (filter:
+       Min DTE / Max DTE / Min OI / Min Vol / warning; scan: Delta /
+       Top N / spacer / Scan / spacer), so the offset between Top N and
+       Min OI is exactly one column-gap (~1rem). */
     [class*="st-key-top_n_align"] {
-        padding-left: 1.15rem;
+        padding-left: 1rem;
     }
 
     /* Lift the Scan button a few pixels above the row's bottom baseline
        so it sits even with the visual middle of the Top N input rather
-       than flush with the input's bottom edge. */
+       than flush with the input's bottom edge. The left padding nudges
+       the button ~10px right of its column's left edge so it lines up
+       under the orange warning text rather than flush-left in the column. */
     [class*="st-key-scan_btn_lift"] {
         margin-bottom: 4px;
+        padding-left: 10px;
     }
 
     /* Primary (Scan) button — orange fallback so it stands out on every

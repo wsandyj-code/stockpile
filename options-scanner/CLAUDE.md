@@ -57,6 +57,7 @@ Run `uv sync` from repo root after any `pyproject.toml` change.
 
 | Column  | Meaning                                            |
 |---------|----------------------------------------------------|
+| Top     | Web UI only. Rank within the top-N list per type (1 = strongest signal); blank if not in top N |
 | Strike  | Option strike price                                |
 | Expiration | Expiration date; trailing `2E` = 2 earnings before exp |
 | DTE     | Days to expiration                                 |
@@ -66,6 +67,7 @@ Run `uv sync` from repo root after any `pyproject.toml` change.
 | Delta   | Black-Scholes delta (call: 0–1, put: −1–0)         |
 | Ann%    | Annualized yield: calls vs. spot, puts vs. strike  |
 | OI      | Open interest                                      |
+| Vol     | Web UI only. Today's trading volume (short-term liquidity) |
 | NetCr   | Roll mode only: net credit received if rolled here |
 
 ## LT capital gains note

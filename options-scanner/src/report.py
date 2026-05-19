@@ -211,6 +211,7 @@ def render_html(
     buy: bool,
     roll_close_cost: float | None,
     min_oi: int,
+    min_vol: int = 0,
 ) -> str:
     """Return the single-ticker HTML report as a string."""
     today = date.today()
@@ -219,7 +220,8 @@ def render_html(
     type_label = {"call": "Calls", "put": "Puts"}.get(mode, "Calls & Puts")
     scan_date = today.strftime("%B %d, %Y")
 
-    df = df[df["open_interest"] >= min_oi].copy()
+    df = df[(df["open_interest"] >= min_oi)
+            & (df["volume"] >= min_vol)].copy()
 
     earn_html = ""
     if earnings_dates:

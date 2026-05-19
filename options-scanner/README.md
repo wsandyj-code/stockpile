@@ -37,10 +37,14 @@ uv run streamlit run options-scanner/run_app.py
 A browser tab opens at `http://localhost:8501` with five tabs:
 
 - **Single Ticker** — type a symbol, pick Calls/Puts/Both and Sell/Buy,
-  hit Scan. You get a volatility-surface chart with top picks
-  highlighted, a per-expiration chain view sorted by strike with
-  IV+pp row shading, and a top candidates table ranked across all
-  expirations.
+  hit Scan. Filter inputs: Min DTE / Max DTE, Min OI, Min Vol (today's
+  trading volume), delta range, Top N. You get a volatility-surface
+  chart (top picks labeled with their rank — `1` is the strongest
+  signal per type), a per-expiration chain view sorted by strike with
+  IV+pp row shading and a "Top" column showing the same rank, and a
+  top candidates table ranked across all expirations. The data source
+  (Yahoo Finance / Schwab) toggle sits in the title bar so you can
+  flip between sources without opening the sidebar.
 - **Portfolio** — drag in a brokerage CSV (Schwab, Robinhood, Fidelity,
   Merrill, or a hand-written
   [stockpile file](../docs/stockpile-format.md)), pick the format, hit
@@ -214,6 +218,7 @@ Override the directory with `--output-dir path/to/dir`.
 
 | Column | What it means |
 |--------|--------------|
+| Top | Web UI only. Rank within the top-N list per option type (1 = strongest signal). Blank for rows that didn't make the cut. |
 | Strike | Option strike price |
 | Expiration | Expiration date |
 | DTE | Days to expiration |
@@ -223,6 +228,7 @@ Override the directory with `--output-dir path/to/dir`.
 | Delta | Approx. probability of expiring in the money |
 | Ann% | Annualized yield on premium (calls vs. spot; puts vs. strike) |
 | OI | Open interest |
+| Vol | Web UI only. Today's trading volume — short-term liquidity signal complementing OI. |
 | NetCr | Roll mode only: new mid minus close cost |
 
 ## Example output and how to read it
@@ -315,8 +321,11 @@ neutral they must hedge:
 ### How to read the chart
 
 The chart shows net GEX per strike as green (positive / pinning) or
-red (negative / amplifying) bars. The dashed vertical line is the
-current spot price.
+red (negative / amplifying) bars. The dashed vertical line marks
+the current spot price (with the `Spot $XXX.XX` label next to it).
+The chart title carries the ticker symbol and the caption notes how
+many expirations and what DTE range were summed — so a screenshot
+stays self-explanatory days later.
 
 Three summary metrics appear above the chart:
 
@@ -371,7 +380,7 @@ by IV excess so the richest new premium surfaces first.
 ## Data sources
 
 The tool supports two data sources, selectable via `config.toml`,
-the `--data-source` CLI flag, or the sidebar dropdown in the web UI:
+the `--data-source` CLI flag, or the title-bar toggle in the web UI:
 
 | Source | Setup | Data quality |
 |--------|-------|-------------|
