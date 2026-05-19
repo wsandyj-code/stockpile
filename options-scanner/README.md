@@ -532,6 +532,16 @@ Planned improvements, roughly in priority order:
   vega across all open positions so you can see total book exposure
   at a glance.
 
+- **Third-party Schwab / Yahoo client libraries** — evaluate whether
+  community-maintained CLIs / Python clients (e.g. `schwab-py`,
+  `schwabdev`, `yfinance`) are worth adopting in place of the
+  hand-rolled HTTP calls and OAuth flow currently in `src/chain.py`
+  and `schwab_auth.py`. Tradeoffs: less code to maintain and easier
+  access to endpoints we haven't wired yet (streaming quotes,
+  account history) vs. taking on an external dependency that could
+  go stale or change shape. Pick one per data source and prototype
+  before committing.
+
 ## Disclaimer
 
 This software is provided free of charge, as-is, with no warranty
