@@ -568,9 +568,9 @@ def process_ticker(ticker, transactions, brokerage, service,
         sheets.write_range(service, tab_name, "K1", [["Data issues: " + "; ".join(issues)]])
     sheets.write_range(service, tab_name, "K4", [[adj_text]])
     sheets.write_range(service, tab_name, "K5", [[yellow_legend_text]])
-    if show_calls and status != "Closed":
+    if show_calls and status != "Closed" and open_calls:
         sheets.write_range(service, tab_name, "K17", [[tv_call_text]])
-    if show_puts:
+    if show_puts and open_puts:
         sheets.write_range(service, tab_name, f"K{p+7}", [[tv_put_text]])
     sheets.write_range(service, tab_name, f"K{i+4}", [[ic_yield_text]])
     sheets.write_range(service, tab_name, f"K{i+5}", [[cov_yield_text]])
@@ -604,7 +604,7 @@ def process_ticker(ticker, transactions, brokerage, service,
         # 16 + 9*idx — i.e. the 8th row of the 8-row section starting
         # at base_0 = 9 + 9*idx).
         *([req
-           for idx in range(max(len(open_calls), 1))
+           for idx in range(len(open_calls))
            for tv_row in [16 + 9 * idx]
            for req in [
                footnote_merge(tv_row),
@@ -615,7 +615,7 @@ def process_ticker(ticker, transactions, brokerage, service,
            ] if show_calls and status != "Closed" else []),
         # Same per-put — TV row sits at p0 + 7 + 9*idx.
         *([req
-           for idx in range(max(len(open_puts), 1))
+           for idx in range(len(open_puts))
            for tv_row in [p0 + 7 + 9 * idx]
            for req in [
                footnote_merge(tv_row),

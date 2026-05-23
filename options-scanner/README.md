@@ -542,6 +542,12 @@ Planned improvements, roughly in priority order:
   vega across all open positions so you can see total book exposure
   at a glance.
 
+- **Roll expiration picker — monthly expirations** *(minor)* — replace
+  the free-form date picker in Roll mode with a selectbox of upcoming
+  monthly expirations (third Friday of each month, computed from today).
+  More correct for options trading and avoids entering invalid dates.
+  Trade-off: drops support for weekly expirations.
+
 - **Third-party Schwab / Yahoo client libraries** — evaluate whether
   community-maintained CLIs / Python clients (e.g. `schwab-py`,
   `schwabdev`, `yfinance`) are worth adopting in place of the
