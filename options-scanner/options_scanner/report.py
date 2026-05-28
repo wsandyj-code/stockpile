@@ -539,7 +539,7 @@ def render_portfolio_html(
             calls_str = "—"
         summary_rows += (
             f'<tr><td><a href="#{ticker}">{ticker}</a></td>'
-            f"<td>{pos['shares']}</td><td>{spot_str}</td>"
+            f"<td>{pos['shares']:g}</td><td>{spot_str}</td>"
             f"<td>{status_html}</td><td>{calls_str}</td></tr>"
         )
 
@@ -620,7 +620,7 @@ def render_portfolio_html(
         sections_html += (
             f'<div class="position-block" id="{ticker}">'
             f'<a class="nav-link" href="#top">&#8593; top</a>'
-            f"<h3>{ticker} &mdash; {pos['shares']} shares {badge}</h3>"
+            f"<h3>{ticker} &mdash; {pos['shares']:g} shares {badge}</h3>"
             f'<div class="card" style="padding:1em 1.5em">{body_html}</div>'
             f"</div>"
         )
