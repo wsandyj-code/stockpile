@@ -350,7 +350,9 @@ def compute_status(transactions, open_positions):
     for row in transactions:
         _, action, opt_type, _sym, _, _, qty, _, _, _, _ = row
         if opt_type == "Stock" and qty != "":
-            if action == "Buy":
+            if action == "Transfer In":
+                shares = float(qty)
+            elif action in ("Buy", "Reinvest Shares"):
                 shares += float(qty)
             elif action == "Sell":
                 shares -= float(qty)
