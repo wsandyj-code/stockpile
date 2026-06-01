@@ -1,7 +1,8 @@
 # stockpile
 
 Monorepo of stock portfolio tools: options scanner, position
-tracker, cost basis charts, and shared parsing/finance utilities.
+tracker, cost basis charts, trading dashboard, and shared
+parsing/finance utilities.
 
 > **Disclaimer** — This software is provided free of charge for
 > non-commercial use, as-is, with no warranty of any kind. There is
@@ -51,6 +52,9 @@ A companion series on building a Yahoo Finance CLI with Claude Code
   tracker fed from brokerage CSV exports.
 - **[cost-basis-charts](cost-basis-charts/README.md)** — Interactive
   cost basis vs. price charts.
+- **[trading-dashboard](trading-dashboard/README.md)** — Live
+  multi-pane charting dashboard with technical indicators for crypto
+  (Hyperliquid) and equities (Yahoo Finance). Standalone Flask app.
 - **[google-sheets-setup](google-sheets-setup/README.md)** — Google
   Sheets API setup docs.
 - **shared** — pip-installable `stocks-shared` package: CSV parsers
