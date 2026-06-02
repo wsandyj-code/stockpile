@@ -19,9 +19,9 @@ parsing/finance utilities.
 
 ## Videos
 
-These tools were built live on YouTube using Claude Code. Watch to
-see how each tool was made and how to use it with your own brokerage
-data.
+These tools were built by me together with Claude Code, with help
+from open-source contributors. The YouTube videos walk through how
+each one works and how to use it with your own brokerage data.
 
 ### Stockpile tools
 
