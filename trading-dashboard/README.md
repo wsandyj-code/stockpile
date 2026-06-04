@@ -12,6 +12,7 @@ Key features
 
 Table of contents
 - Quickstart
+- Startup layout (config.toml)
 - API Endpoints
 - Data sources
 - Caching & rate limiting
@@ -32,13 +33,55 @@ Or use the helper scripts from this directory (they call `uv run`):
 
 The app listens on 0.0.0.0:5000 by default.
 
+Startup layout (config.toml)
+The startup layout — how many panes open and what each one shows — is
+read from `trading-dashboard/config.toml` on every page load (edit and
+refresh; no server restart needed). The file is gitignored: copy
+`config.toml.example` to `config.toml` and edit. If it's missing, the
+app falls back to a single yfinance pane.
+
+Keys:
+- `chart_count` — panes visible on first load (1, 2, 4, 6, or 8).
+- `default_source` — source for any pane not listed below, and the
+  fallback when a `[[pane]]` omits `source`: yfinance, schwab, or
+  hyperliquid.
+- `[[pane]]` — an ordered list (up to 8) of startup panes, each with
+  `source`, `symbol`, and `timeframe` (one of 1m, 3m, 5m, 15m, 30m,
+  1h, 4h, 1d, 1w, 1M).
+
+Example:
+
+```toml
+chart_count = 2
+default_source = "yfinance"
+
+[[pane]]
+source = "yfinance"
+symbol = "AVGO"
+timeframe = "1d"
+
+[[pane]]
+source = "hyperliquid"
+symbol = "ETH"
+timeframe = "15m"
+```
+
+A `schwab` pane needs Schwab credentials configured first (see the
+Schwab data source section below); without that it just shows a setup
+error, and the other panes are unaffected.
+
+This is the dashboard's own layout file. It is separate from
+`options-scanner/config.toml`, which holds the shared Schwab API
+credentials.
+
 API Endpoints
 - GET /api/ohlcv?source={source}&symbol={symbol}&interval={interval}&limit={n}
   - Returns OHLCV arrays for the requested source/symbol/interval. Response JSON: {ok: true, data: [...]}
 - GET /api/price?source={source}&symbol={symbol}
   - Returns latest price JSON
 - GET /api/sources
-  - Lists available data sources
+  - Lists available data sources, plus the startup layout
+    (default_source, chart_count, panes) read from config.toml
 - GET /api/health
   - Health check (200 OK)
 - GET /
@@ -72,7 +115,8 @@ Caching & rate limiting
 Developer notes
 - Entry point: app.py
 - Core logic: data_source.py
-- Defaults: source="hyperliquid", default symbol 'ETH'
+- Startup layout (panes + default source) comes from config.toml; see
+  "Startup layout (config.toml)" above. Absent file → one yfinance pane.
 - No unit test suite currently; add pytest tests under tests/ if desired.
 
 Contributing

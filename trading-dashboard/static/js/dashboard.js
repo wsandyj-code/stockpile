@@ -1,7 +1,7 @@
 // dashboard.js — state management, pane rendering, live data, bootstrap
 // Depends on: indicators.js, indicators-render.js, LightweightCharts global
 
-const STORAGE_KEY = 'td-v12';
+const STORAGE_KEY = 'td-v13';
 const MAX_PANES = 8;
 const TFS = ['1m','3m','5m','15m','30m','1h','4h','1d','1w','1M'];
 const SRC_LABELS = { hyperliquid: 'Hyperliquid (Crypto)', yfinance: 'Yahoo Finance', schwab: 'Schwab' };
@@ -9,9 +9,14 @@ const SOURCES = Object.keys(SRC_LABELS);
 
 let CATALOG = { hyperliquid: ['ETH'], yfinance: ['AVGO'], schwab: ['AAPL'] };
 
-// Source new panes start on. User-overridable via the "New panes:" dropdown
-// and persisted; panes whose source/symbol the user has set are left alone.
+// Fallback source, used only if the startup layout can't be fetched. The
+// real startup defaults come from the server (trading-dashboard/config.toml).
 const DEFAULT_SOURCE = 'yfinance';
+
+// Startup layout from the server (config.toml), fetched in bootstrap().
+// `panes` is an ordered list of {source, symbol, timeframe}; any pane beyond
+// the list falls back to default_source + a catalog symbol.
+let LAYOUT = { default_source: DEFAULT_SOURCE, chart_count: 1, panes: [] };
 
 const IND_SECTIONS = [
   { title: 'Moving Averages', items: [
@@ -57,30 +62,33 @@ const IND_SECTIONS = [
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
-function defaultPanes(src = DEFAULT_SOURCE) {
-  const cat = CATALOG[src] || [''];
-  return Array.from({ length: MAX_PANES }, (_, i) => ({
-    id: i,
-    source: src,
-    symbol: cat[i % cat.length] || '',
-    timeframe: '1d',
-    indicators: {},
-    frvpRange: null,
-    customized: false,
-  }));
+function defaultPanes() {
+  return Array.from({ length: MAX_PANES }, (_, i) => {
+    const cfg = LAYOUT.panes[i];
+    if (cfg) {
+      return { id: i, source: cfg.source, symbol: cfg.symbol,
+               timeframe: cfg.timeframe, indicators: {}, frvpRange: null,
+               customized: false };
+    }
+    // Panes beyond the configured layout: seed from default_source.
+    const src = LAYOUT.default_source;
+    const cat = CATALOG[src] || [''];
+    return { id: i, source: src, symbol: cat[i % cat.length] || '',
+             timeframe: '1d', indicators: {}, frvpRange: null,
+             customized: false };
+  });
 }
 
 let _initDebounceTimers = {};
 const state = {
-  chartCount: 1, defaultSource: DEFAULT_SOURCE, panes: defaultPanes(),
+  chartCount: 1, panes: defaultPanes(),
   charts: new Map(), sockets: new Map(), pollers: new Map(), ros: new Map(),
 };
 
 function loadState() {
   let saved = null;
   try { saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null'); } catch {}
-  state.defaultSource = (saved && saved.defaultSource) || DEFAULT_SOURCE;
-  const panes = defaultPanes(state.defaultSource);
+  const panes = defaultPanes();
   if (saved && Array.isArray(saved.panes)) {
     saved.panes.forEach(sp => {
       if (sp && typeof sp.id === 'number' && panes[sp.id]) {
@@ -97,13 +105,12 @@ function loadState() {
     });
   }
   state.panes = panes;
-  state.chartCount = (saved && saved.chartCount) || 1;
+  state.chartCount = (saved && saved.chartCount) || LAYOUT.chart_count;
 }
 
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify({
     chartCount: state.chartCount,
-    defaultSource: state.defaultSource,
     panes: state.panes.map(({ id, source, symbol, timeframe, indicators, frvpRange, customized }) =>
       ({ id, source, symbol, timeframe, indicators, frvpRange: frvpRange || null, customized: !!customized })),
   }));
@@ -385,34 +392,9 @@ function initAll() {
 
 function resetAll() {
   for (let i = 0; i < MAX_PANES; i++) destroyPane(i);
-  state.chartCount = 1;
-  state.panes = defaultPanes(state.defaultSource);
-  document.getElementById('chartCount').value = '1';
-  saveState(); renderDashboard(); initAll();
-}
-
-function populateDefaultSourceSelect() {
-  const sel = document.getElementById('defaultSource');
-  if (!sel) return;
-  sel.innerHTML = '';
-  SOURCES.forEach(o => {
-    const e = document.createElement('option');
-    e.value = o; e.textContent = SRC_LABELS[o] || o;
-    if (o === state.defaultSource) e.selected = true;
-    sel.appendChild(e);
-  });
-}
-
-function applyDefaultSource(src) {
-  state.defaultSource = src;
-  // Re-seed only panes the user hasn't explicitly set (source/symbol untouched).
-  const cat = CATALOG[src] || [''];
-  state.panes.forEach((ps, i) => {
-    if (!ps.customized) {
-      ps.source = src;
-      ps.symbol = cat[i % cat.length] || '';
-    }
-  });
+  state.chartCount = LAYOUT.chart_count;
+  state.panes = defaultPanes();
+  document.getElementById('chartCount').value = String(state.chartCount);
   saveState(); renderDashboard(); initAll();
 }
 
@@ -425,9 +407,11 @@ async function bootstrap() {
       if (body.symbols.hyperliquid) CATALOG.hyperliquid = body.symbols.hyperliquid;
       if (body.symbols.schwab) CATALOG.schwab = body.symbols.schwab;
     }
+    if (body?.default_source) LAYOUT.default_source = body.default_source;
+    if (body?.chart_count) LAYOUT.chart_count = body.chart_count;
+    if (Array.isArray(body?.panes)) LAYOUT.panes = body.panes;
   } catch {}
   loadState();
-  populateDefaultSourceSelect();
   document.getElementById('chartCount').value = String(state.chartCount);
   renderDashboard();
   initAll();
@@ -439,7 +423,6 @@ document.getElementById('chartCount').addEventListener('change', e => {
   state.chartCount = Number(e.target.value);
   saveState(); renderDashboard(); initAll();
 });
-document.getElementById('defaultSource').addEventListener('change', e => applyDefaultSource(e.target.value));
 document.getElementById('resetBtn').addEventListener('click', resetAll);
 window.addEventListener('beforeunload', () => { for (let i = 0; i < MAX_PANES; i++) destroyPane(i); });
 

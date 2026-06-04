@@ -1,4 +1,5 @@
-import time, hashlib
+import time, hashlib, tomllib
+from pathlib import Path
 from flask import Flask, jsonify, request, render_template
 from flask_cors import CORS
 from data_source import fetch_ohlcv, fetch_schwab_live_price, _DATASOURCE_REGISTRY
@@ -9,6 +10,46 @@ _CACHE_TTL = {"1m":20,"3m":30,"5m":45,"15m":90,"30m":150,"1h":300,"4h":600,"1d":
 _PRICE_TTL = 300
 
 def _key(source,symbol,interval,limit): return hashlib.md5(f"{source}:{symbol}:{interval}:{limit}".encode()).hexdigest()
+
+# ── Startup layout (config.toml) ──────────────────────────────────────────────
+_CONFIG_PATH = Path(__file__).resolve().parent / "config.toml"
+_VALID_SOURCES = {"yfinance", "schwab", "hyperliquid"}
+_VALID_TFS = {"1m","3m","5m","15m","30m","1h","4h","1d","1w","1M"}
+_VALID_COUNTS = {1, 2, 4, 6, 8}
+_DEFAULT_LAYOUT = {"default_source": "yfinance", "chart_count": 1, "panes": []}
+
+def _load_layout():
+    """Read the startup pane layout from config.toml, falling back to a
+    safe default when the file is missing or malformed. Read per request
+    so edits apply on a browser refresh without a server restart."""
+    layout = dict(_DEFAULT_LAYOUT)
+    if not _CONFIG_PATH.exists():
+        return layout
+    try:
+        with open(_CONFIG_PATH, "rb") as f:
+            cfg = tomllib.load(f)
+    except Exception:
+        app.logger.exception("Could not read config.toml; using default layout")
+        return layout
+    ds = str(cfg.get("default_source", layout["default_source"])).lower()
+    if ds in _VALID_SOURCES:
+        layout["default_source"] = ds
+    cc = cfg.get("chart_count", layout["chart_count"])
+    if cc in _VALID_COUNTS:
+        layout["chart_count"] = cc
+    panes = []
+    for p in (cfg.get("pane") or [])[:8]:
+        src = str(p.get("source", layout["default_source"])).lower()
+        if src not in _VALID_SOURCES:
+            src = layout["default_source"]
+        tf = str(p.get("timeframe", "1d"))
+        if tf not in _VALID_TFS:
+            tf = "1d"
+        panes.append({"source": src,
+                      "symbol": str(p.get("symbol", "")).strip().upper(),
+                      "timeframe": tf})
+    layout["panes"] = panes
+    return layout
 
 def _get(key,ttl):
     e = _CACHE.get(key)
@@ -25,6 +66,12 @@ def ohlcv():
     if cached is not None: return jsonify({"ok":True,"data":cached,"cached":True})
     try:
         candles = fetch_ohlcv(source,symbol,interval,limit); _put(ckey,candles); return jsonify({"ok":True,"data":candles,"cached":False})
+    except ValueError as e:
+        # Intentional, user-facing reasons (Schwab not configured, no data
+        # for symbol, etc.) — surface the message so the pane tells the user
+        # what to fix instead of a generic "could not fetch".
+        app.logger.warning("ohlcv fetch failed (source=%s symbol=%s interval=%s): %s", source, symbol, interval, e)
+        return jsonify({"ok":False,"error":str(e).replace("\n"," ")}), 400
     except Exception:
         app.logger.exception("ohlcv fetch failed (source=%s symbol=%s interval=%s)", source, symbol, interval)
         return jsonify({"ok":False,"error":f"Could not fetch data for '{symbol}' from '{source}'"}), 400
@@ -59,13 +106,17 @@ def index(): return render_template('index.html')
 
 @app.route('/api/sources')
 def sources():
+    layout = _load_layout()
     return jsonify(
         status='ok',
         symbols={
             'hyperliquid': ['ETH'],
             'yfinance': ['AVGO'],
             'schwab': ['AAPL'],
-        }
+        },
+        default_source=layout['default_source'],
+        chart_count=layout['chart_count'],
+        panes=layout['panes'],
     )
 
 if __name__ == '__main__': app.run(debug=False, host='0.0.0.0', port=5000, threaded=True)
