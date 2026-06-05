@@ -17,7 +17,7 @@ import pandas as pd
 import streamlit as st
 
 from options_scanner.compute.gex_summary import per_strike_gex, gamma_flip_strike
-from options_scanner.format import STRIKE_D3_FORMAT
+from options_scanner.format import STRIKE_D3_FORMAT, strike_tick_values
 from options_scanner.display.scan_stamp import scan_stamp_color, scan_stamp_text
 
 
@@ -116,7 +116,10 @@ def show_gex_chart(df: pd.DataFrame, spot: float,
     bars = alt.Chart(gex_zoomed).mark_bar(opacity=0.85).encode(
         x=alt.X("strike:Q", title="Strike",
                 scale=alt.Scale(domain=[x_min, x_max]),
-                axis=alt.Axis(format=STRIKE_D3_FORMAT)),
+                axis=alt.Axis(
+                    format=STRIKE_D3_FORMAT,
+                    values=strike_tick_values(gex_zoomed["strike"], x_min, x_max)
+                    or alt.Undefined)),
         y=alt.Y("gex:Q", title="Net GEX ($)"),
         color=alt.Color("color:N",
                         scale=alt.Scale(
